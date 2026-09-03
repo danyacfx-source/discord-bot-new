@@ -1,0 +1,13 @@
+﻿# Environment / secrets
+.env
+# Python
+__pycache__/
+*.pyc
+# Bot runtime data
+bot.log
+*.db
+*.db-shm
+*.db-wal
+bot_data_backup.db
+# Legacy duplicates
+bot — копия.py
