@@ -1,8 +1,9 @@
+import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
 
-DB_FILE = "wardogs.db"
+DB_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wardogs.db")
 _local = threading.local()
 
 
