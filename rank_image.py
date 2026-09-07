@@ -27,8 +27,18 @@ _FONT_CACHE: dict[int, ImageFont.FreeTypeFont] = {}
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     key = (size, bold)
     if key not in _FONT_CACHE:
-        path = "C:\\Windows\\Fonts\\arialbd.ttf" if bold else "C:\\Windows\\Fonts\\arial.ttf"
-        _FONT_CACHE[key] = ImageFont.truetype(path, size)
+        # Бот может работать на Linux, поэтому Windows-шрифт не должен быть единственным вариантом.
+        candidates = (
+            ["C:\\Windows\\Fonts\\arialbd.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
+            if bold else
+            ["C:\\Windows\\Fonts\\arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
+        )
+        for path in candidates:
+            if os.path.isfile(path):
+                _FONT_CACHE[key] = ImageFont.truetype(path, size)
+                break
+        else:
+            _FONT_CACHE[key] = ImageFont.load_default()
     return _FONT_CACHE[key]
 
 
