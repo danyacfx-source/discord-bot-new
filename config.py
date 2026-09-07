@@ -22,6 +22,20 @@ VC_CONTROL_CHANNEL = int(os.getenv("VC_CONTROL_CHANNEL", "0"))
 
 LOG_CHANNEL = int(os.getenv("LOG_CHANNEL", "0"))
 
+# Twitch
+TWITCH_CHANNELS = [
+    x.strip().lower().lstrip("@")
+    for x in os.getenv("TWITCH_CHANNELS", os.getenv("TWITCH_CHANNEL_LOGIN", "f_a_n_e")).split(",")
+    if x.strip()
+]
+TWITCH_ANNOUNCE_CHANNEL = int(os.getenv("TWITCH_ANNOUNCE_CHANNEL", "0"))
+TWITCH_CHECK_INTERVAL = int(os.getenv("TWITCH_CHECK_INTERVAL", "60"))
+
+# Каналы, где работает автоперевод сообщений (переводы только в этих каналах).
+TRANSLATE_CHANNELS = [
+    int(x) for x in os.getenv("TRANSLATE_CHANNELS", "").replace(" ", "").split(",") if x.strip().isdigit()
+]
+
 try:
     ACTIVITY_ROLES_CONFIG = json.loads(os.getenv("ACTIVITY_ROLES_CONFIG", "[]"))
 except json.JSONDecodeError:

@@ -29,12 +29,12 @@ class ChannelSelectView(discord.ui.View):
         self.add_item(select)
 
         if page > 0:
-            btn = discord.ui.button(label="◀ Назад", style=discord.ButtonStyle.gray)
+            btn = discord.ui.Button(label="◀ Назад", style=discord.ButtonStyle.gray)
             btn.callback = self._prev
             self.add_item(btn)
 
         if end < len(all_channels):
-            btn = discord.ui.button(label="Вперед ▶", style=discord.ButtonStyle.gray)
+            btn = discord.ui.Button(label="Вперед ▶", style=discord.ButtonStyle.gray)
             btn.callback = self._next
             self.add_item(btn)
 

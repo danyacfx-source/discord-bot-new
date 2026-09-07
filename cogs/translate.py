@@ -10,34 +10,40 @@ from translator import async_translate_text
 from state import user_attachments, user_target_channel
 from views import GuildSelectView
 from modals import SendMessageModal
+import config
+
+
+# Контекст-меню регистрируется на уровне модуля: в discord.py 2.7+ декоратор
+# @app_commands.context_menu не поддерживается внутри класса кога (падает на
+# импорте с «context menus cannot be defined inside a class»), из-за чего ког
+# не загружался и переводы полностью отключались.
+@app_commands.context_menu(name="Перевести")
+async def translate_context(interaction: discord.Interaction, message: discord.Message):
+    text = message.content.strip()
+    if not text:
+        await interaction.response.send_message(
+            "❌ Сообщение не содержит текста.", ephemeral=True
+        )
+        return
+
+    translated = await async_translate_text(text, "ru")
+    if not translated:
+        await interaction.response.send_message(
+            "❌ Не удалось перевести.", ephemeral=True
+        )
+        return
+
+    embed = discord.Embed(
+        title=f"🌐 Перевод • {message.author.display_name}",
+        description=translated,
+        color=discord.Color(0x5865F2),
+    )
+    await interaction.response.send_message(embed=embed)
 
 
 class TranslateCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-
-    @app_commands.context_menu(name="Перевести")
-    async def translate_context(self, interaction: discord.Interaction, message: discord.Message):
-        text = message.content.strip()
-        if not text:
-            await interaction.response.send_message(
-                "❌ Сообщение не содержит текста.", ephemeral=True
-            )
-            return
-
-        translated = await async_translate_text(text, "ru")
-        if not translated:
-            await interaction.response.send_message(
-                "❌ Не удалось перевести.", ephemeral=True
-            )
-            return
-
-        embed = discord.Embed(
-            title=f"🌐 Перевод • {message.author.display_name}",
-            description=translated,
-            color=discord.Color(0x5865F2),
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -48,6 +54,10 @@ class TranslateCog(commands.Cog):
 
         if isinstance(message.channel, discord.DMChannel):
             await self._handle_dm(message, text)
+            return
+
+        # Автоперевод работает только в перечисленных каналах.
+        if message.channel.id not in config.TRANSLATE_CHANNELS:
             return
 
         if not text or len(text) < 2:
@@ -113,4 +123,5 @@ class TranslateCog(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
+    bot.tree.add_command(translate_context)
     await bot.add_cog(TranslateCog(bot))

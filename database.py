@@ -1,8 +1,13 @@
 import sqlite3
 import threading
+from datetime import datetime, timezone
 
 DB_FILE = "wardogs.db"
 _local = threading.local()
+
+
+def _utcnow() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def get_conn() -> sqlite3.Connection:
@@ -55,8 +60,37 @@ def init_db():
             timestamp TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_arl_user ON activity_roles_log(user_id);
+
+        CREATE TABLE IF NOT EXISTS twitch_channels (
+            login TEXT PRIMARY KEY,
+            added_by INTEGER NOT NULL,
+            added_at TEXT NOT NULL
+        );
     """)
     conn.commit()
+
+def get_twitch_channels() -> list[str]:
+    """Список отслеживаемых Twitch-каналов."""
+    conn = get_conn()
+    rows = conn.execute("SELECT login FROM twitch_channels ORDER BY login").fetchall()
+    return [r["login"] for r in rows]
+
+def add_twitch_channel(login: str, added_by: int) -> bool:
+    """Добавить канал. Вернёт False, если такой уже есть."""
+    conn = get_conn()
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO twitch_channels (login, added_by, added_at) VALUES (?, ?, ?)",
+        (login, added_by, _utcnow()),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+def remove_twitch_channel(login: str) -> bool:
+    """Удалить канал. Вернёт True, если он был."""
+    conn = get_conn()
+    cur = conn.execute("DELETE FROM twitch_channels WHERE login = ?", (login,))
+    conn.commit()
+    return cur.rowcount > 0
 
 
 def format_duration(seconds: int) -> str:
