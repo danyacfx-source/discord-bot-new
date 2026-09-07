@@ -46,6 +46,7 @@ async def main():
         "cogs.backgrounds",
         "cogs.twitch",
         "cogs.levels",
+        "cogs.logging",
     ]
 
     async with bot:

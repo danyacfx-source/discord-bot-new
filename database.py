@@ -1,3 +1,4 @@
+import hashlib
 import os
 import sqlite3
 import threading
@@ -85,6 +86,16 @@ def init_db():
             cx INTEGER DEFAULT 125,
             cy INTEGER DEFAULT 135,
             radius INTEGER DEFAULT 75
+        );
+
+        CREATE TABLE IF NOT EXISTS log_channels (
+            log_type TEXT PRIMARY KEY,
+            channel_id INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS log_sent (
+            fingerprint TEXT PRIMARY KEY,
+            sent_at TEXT NOT NULL
         );
     """)
     conn.commit()
@@ -280,3 +291,80 @@ def clear_backgrounds() -> int:
     cur = conn.execute("DELETE FROM backgrounds")
     conn.commit()
     return cur.rowcount
+
+
+# --- Log channels ---
+
+def set_log_channel(log_type: str, channel_id: int):
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO log_channels (log_type, channel_id) VALUES (?, ?) "
+        "ON CONFLICT(log_type) DO UPDATE SET channel_id = excluded.channel_id",
+        (log_type, channel_id),
+    )
+    conn.commit()
+
+
+def get_log_channel(log_type: str) -> int | None:
+    conn = get_conn()
+    row = conn.execute("SELECT channel_id FROM log_channels WHERE log_type = ?", (log_type,)).fetchone()
+    return row["channel_id"] if row else None
+
+
+def get_all_log_channels() -> dict[str, int]:
+    conn = get_conn()
+    return {r["log_type"]: r["channel_id"] for r in conn.execute("SELECT * FROM log_channels").fetchall()}
+
+
+def remove_log_channel(log_type: str) -> bool:
+    conn = get_conn()
+    cur = conn.execute("DELETE FROM log_channels WHERE log_type = ?", (log_type,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+# --- Anti-duplicate for log embeds ---
+
+_claim_memory: dict[str, float] = {}
+
+import time as _time
+
+
+def _time_ago(seconds: int) -> str:
+    return (datetime.now(timezone.utc) - __import__("datetime").timedelta(seconds=seconds)).isoformat()
+
+
+def make_log_fingerprint(log_type: str, embed) -> str:
+    """Стабильный отпечаток эмбеда лога без учёта времени/цвета."""
+    parts = [log_type, embed.title or ""]
+    if embed.description:
+        parts.append(embed.description)
+    for f in embed.fields:
+        parts.append(f"{f.name}\x00{f.value}")
+    raw = "\x01".join(parts)
+    return hashlib.sha1(raw.encode("utf-8", "replace")).hexdigest()
+
+
+def try_claim_log(fingerprint: str, ttl_seconds: int = 6) -> bool:
+    """Регистрирует лог как отправленный. True — первая отправка за окно."""
+    now = _time.monotonic()
+    prev = _claim_memory.get(fingerprint)
+    if prev is not None and now - prev < ttl_seconds:
+        return False
+    if len(_claim_memory) > 2048:
+        for k in [k for k, v in _claim_memory.items() if now - v > ttl_seconds * 10]:
+            _claim_memory.pop(k, None)
+    _claim_memory[fingerprint] = now
+
+    conn = get_conn()
+    cutoff = _time_ago(ttl_seconds)
+    try:
+        conn.execute("DELETE FROM log_sent WHERE sent_at < ?", (cutoff,))
+        conn.execute(
+            "INSERT INTO log_sent (fingerprint, sent_at) VALUES (?, ?)",
+            (fingerprint, _utcnow()),
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
