@@ -43,6 +43,7 @@ async def main():
         "cogs.temp_voice",
         "cogs.stats",
         "cogs.activity_roles",
+        "cogs.backgrounds",
         "cogs.twitch",
         "cogs.levels",
     ]
