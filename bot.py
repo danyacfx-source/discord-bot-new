@@ -44,6 +44,7 @@ async def main():
         "cogs.stats",
         "cogs.activity_roles",
         "cogs.twitch",
+        "cogs.levels",
     ]
 
     async with bot:

@@ -36,6 +36,9 @@ TRANSLATE_CHANNELS = [
     int(x) for x in os.getenv("TRANSLATE_CHANNELS", "").replace(" ", "").split(",") if x.strip().isdigit()
 ]
 
+# Фон rank-карточки (путь к картинке; пусто = градиент)
+RANK_BACKGROUND = os.getenv("RANK_BACKGROUND", "")
+
 try:
     ACTIVITY_ROLES_CONFIG = json.loads(os.getenv("ACTIVITY_ROLES_CONFIG", "[]"))
 except json.JSONDecodeError:
