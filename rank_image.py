@@ -24,21 +24,36 @@ TEXT_X = 270
 _FONT_CACHE: dict[int, ImageFont.FreeTypeFont] = {}
 
 
+_FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+
+# Приоритет: локальные шрифты бота (всегда есть кириллица) -> системные -> default.
+_CANDIDATES_TTF = [
+    os.path.join(_FONT_DIR, "DejaVuSans.ttf"),
+    "C:\\Windows\\Fonts\\arial.ttf",
+    "C:\\Windows\\Fonts\\segoeui.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+]
+_CANDIDATES_TTF_BOLD = [
+    os.path.join(_FONT_DIR, "DejaVuSans-Bold.ttf"),
+    "C:\\Windows\\Fonts\\arialbd.ttf",
+    "C:\\Windows\\Fonts\\segoeuib.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
+]
+
+
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     key = (size, bold)
     if key not in _FONT_CACHE:
-        # Бот может работать на Linux, поэтому Windows-шрифт не должен быть единственным вариантом.
-        candidates = (
-            ["C:\\Windows\\Fonts\\arialbd.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]
-            if bold else
-            ["C:\\Windows\\Fonts\\arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
-        )
-        for path in candidates:
-            if os.path.isfile(path):
-                _FONT_CACHE[key] = ImageFont.truetype(path, size)
-                break
-        else:
+        candidates = _CANDIDATES_TTF_BOLD if bold else _CANDIDATES_TTF
+        path = next((p for p in candidates if os.path.isfile(p)), None)
+        if path is None:
             _FONT_CACHE[key] = ImageFont.load_default()
+        else:
+            _FONT_CACHE[key] = ImageFont.truetype(path, size)
     return _FONT_CACHE[key]
 
 

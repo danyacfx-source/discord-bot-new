@@ -28,6 +28,7 @@ def _bg_rows() -> list[dict]:
 
 def _grid_font() -> ImageFont.FreeTypeFont:
     for p in (
+        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fonts", "DejaVuSans.ttf"),
         "C:\\Windows\\Fonts\\arial.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
