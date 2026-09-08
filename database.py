@@ -806,6 +806,16 @@ def add_participant(giveaway_id: int, user_id: int) -> bool:
     return cur.rowcount > 0
 
 
+def remove_participant(giveaway_id: int, user_id: int) -> bool:
+    conn = get_conn()
+    cur = conn.execute(
+        "DELETE FROM giveaway_participants WHERE giveaway_id = ? AND user_id = ?",
+        (giveaway_id, user_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
 def get_participants(giveaway_id: int) -> list[int]:
     conn = get_conn()
     return [r["user_id"] for r in conn.execute(

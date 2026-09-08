@@ -18,6 +18,7 @@ from database import (
     get_participant_count,
     get_participants,
     insert_recovered_giveaway,
+    remove_participant,
     set_giveaway_done,
     set_giveaway_message_id,
 )
@@ -335,6 +336,62 @@ class GiveawayCog(commands.Cog):
             count = get_participant_count(g["id"])
             lines.append(f"**{g['id']}.** {g['prize']} — <t:{ts}:R> • 🎁 {g['winners']} • 👥 {count}")
         await interaction.response.send_message("**Активные розыгрыши:**\n" + "\n".join(lines), ephemeral=True)
+
+    @giveaway.command(name="leave", description="Выйти из розыгрыша (снять своё участие)")
+    @app_commands.describe(giveaway_id="ID розыгрыша (внизу сообщения розыгрыша)")
+    async def giveaway_leave(self, interaction: discord.Interaction, giveaway_id: int):
+        g = get_giveaway(giveaway_id)
+        if g is None:
+            await interaction.response.send_message("❌ Розыгрыш не найден.", ephemeral=True)
+            return
+        if g["done"]:
+            await interaction.response.send_message("ℹ️ Розыгрыш уже завершён.", ephemeral=True)
+            return
+        now = datetime.now(timezone.utc)
+        if datetime.fromisoformat(g["ends_at"]) <= now:
+            await interaction.response.send_message("❌ Розыгрыш уже закончился.", ephemeral=True)
+            return
+        if not remove_participant(giveaway_id, interaction.user.id):
+            await interaction.response.send_message("ℹ️ Ты не участвуешь в этом розыгрыше.", ephemeral=True)
+            return
+        try:
+            await self._refresh_message(interaction.channel, g)
+        except Exception:
+            pass
+        await interaction.response.send_message("✅ Ты вышел из розыгрыша.", ephemeral=True)
+
+    @giveaway.command(name="remove", description="Снять участника с розыгрыша (модерация)")
+    @app_commands.describe(
+        giveaway_id="ID розыгрыша (внизу сообщения розыгрыша)",
+        user="Пользователь, которого снять",
+    )
+    @app_commands.default_permissions(manage_messages=True)
+    async def giveaway_remove(self, interaction: discord.Interaction, giveaway_id: int, user: discord.User):
+        g = get_giveaway(giveaway_id)
+        if g is None:
+            await interaction.response.send_message("❌ Розыгрыш не найден.", ephemeral=True)
+            return
+        if g["done"]:
+            await interaction.response.send_message("ℹ️ Розыгрыш уже завершён.", ephemeral=True)
+            return
+        if not remove_participant(giveaway_id, user.id):
+            await interaction.response.send_message("ℹ️ Этот пользователь не участвует в розыгрыше.", ephemeral=True)
+            return
+        try:
+            await self._refresh_message(interaction.channel, g)
+        except Exception:
+            pass
+        await interaction.response.send_message(f"✅ Участник <@{user.id}> снят с розыгрыша.", ephemeral=True)
+
+    async def _refresh_message(self, channel: discord.TextChannel, g: dict):
+        """Перерисовать эмбед розыгрыша с актуальным счётчиком участников."""
+        if not g.get("message_id"):
+            return
+        try:
+            msg = await channel.fetch_message(int(g["message_id"]))
+            await msg.edit(embed=_embed_for(g))
+        except Exception:
+            pass
 
 
 async def setup(bot: commands.Bot):
