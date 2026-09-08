@@ -1,49 +1,47 @@
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import asyncio
+import time
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from translator import async_translate_text
-from state import user_attachments, user_target_channel
-from views import GuildSelectView
-from modals import SendMessageModal
 import config
+from translator import async_translate_text
 
 
-# Контекст-меню регистрируется на уровне модуля: в discord.py 2.7+ декоратор
-# @app_commands.context_menu не поддерживается внутри класса кога (падает на
-# импорте с «context menus cannot be defined inside a class»), из-за чего ког
-# не загружался и переводы полностью отключались.
+# Контекст-меню регистрируется на уровне модуля: discord.py 2.7+ не даёт
+# определять context_menu внутри класса кога.
 @app_commands.context_menu(name="Перевести")
 async def translate_context(interaction: discord.Interaction, message: discord.Message):
     text = message.content.strip()
     if not text:
-        await interaction.response.send_message(
-            "❌ Сообщение не содержит текста.", ephemeral=True
-        )
+        await interaction.response.send_message("❌ Сообщение без текста.", ephemeral=True)
         return
 
-    translated = await async_translate_text(text, "ru")
+    await interaction.response.defer(ephemeral=True)
+    translated = await async_translate_text(text, config.TRANSLATE_TARGET)
     if not translated:
-        await interaction.response.send_message(
-            "❌ Не удалось перевести.", ephemeral=True
-        )
+        await interaction.followup.send("❌ Не удалось перевести.", ephemeral=True)
         return
 
     embed = discord.Embed(
         title=f"🌐 Перевод • {message.author.display_name}",
         description=translated,
-        color=discord.Color(0x5865F2),
+        color=config.EMBED_COLOR,
     )
-    await interaction.response.send_message(embed=embed)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 class TranslateCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        # Тонкий кулдаун автоперевода на канал: не реплаить при спаме подряд.
+        self._last_auto: dict[int, float] = {}
+        self._lock = asyncio.Lock()
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -52,74 +50,29 @@ class TranslateCog(commands.Cog):
 
         text = message.content.strip()
 
-        if isinstance(message.channel, discord.DMChannel):
-            await self._handle_dm(message, text)
-            return
-
-        # Автоперевод работает только в перечисленных каналах.
+        # Автоперевод только в перечисленных каналах.
         if message.channel.id not in config.TRANSLATE_CHANNELS:
             return
-
         if not text or len(text) < 2:
             return
         if text.startswith(("http://", "https://", "!", "/", ".")):
             return
 
-        translated = await async_translate_text(text, "ru")
+        now = time.monotonic()
+        async with self._lock:
+            last = self._last_auto.get(message.channel.id, 0)
+            if now - last < 5:
+                return
+            self._last_auto[message.channel.id] = now
+
+        translated = await async_translate_text(text, config.TRANSLATE_TARGET)
         if translated and translated.strip().lower() != text.lower():
             embed = discord.Embed(
                 title=f"🌐 Перевод • {message.author.display_name}",
                 description=translated,
-                color=discord.Color(0x5865F2),
+                color=config.EMBED_COLOR,
             )
             await message.reply(embed=embed, mention_author=False)
-
-    async def _handle_dm(self, message: discord.Message, text: str):
-        attachments = list(message.attachments)
-        uid = message.author.id
-
-        if uid in user_target_channel and attachments:
-            channel = user_target_channel.pop(uid)
-            user_attachments[uid] = attachments
-
-            view = discord.ui.View()
-            btn = discord.ui.Button(label="Отправить", style=discord.ButtonStyle.primary)
-
-            async def cb(interaction: discord.Interaction):
-                await interaction.response.send_modal(SendMessageModal(channel, attachments))
-
-            btn.callback = cb
-            view.add_item(btn)
-
-            await message.channel.send(
-                f"✅ Фото прикреплено: **{len(attachments)} шт.** Нажмите кнопку для отправки:",
-                view=view,
-            )
-            return
-
-        if text.lower() in ("старт", "start") or (attachments and uid not in user_target_channel):
-            admin_guilds = []
-            for guild in self.bot.guilds:
-                member = guild.get_member(uid)
-                if not member:
-                    try:
-                        member = await guild.fetch_member(uid)
-                    except Exception:
-                        continue
-                if member and (member.guild_permissions.manage_guild or member.guild_permissions.administrator):
-                    admin_guilds.append(guild)
-
-            if not admin_guilds:
-                await message.channel.send("❌ Нет прав администратора ни на одном сервере!")
-                return
-
-            if attachments:
-                user_attachments[uid] = attachments
-
-            await message.channel.send(
-                "⚙️ **Панель отправки сообщений**\n**Шаг 1:** Выбери сервер:",
-                view=GuildSelectView(admin_guilds),
-            )
 
 
 async def setup(bot: commands.Bot):

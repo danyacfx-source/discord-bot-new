@@ -1,23 +1,19 @@
 import asyncio
-import os
 import random
-import sys
 from datetime import datetime, timedelta, timezone
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 from database import (
+    add_participant,
     create_giveaway,
     get_active_giveaways,
     get_giveaway,
-    set_giveaway_done,
-    add_participant,
-    get_participants,
     get_participant_count,
+    get_participants,
+    set_giveaway_done,
     set_giveaway_message_id,
 )
 

@@ -148,12 +148,22 @@ class LevelsCog(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # member_stats уже ведёт cogs/stats.py — здесь только XP.
         if message.author.bot or not message.guild:
             return
         name = getattr(message.channel, "name", "")
         if name.startswith("тикет-") or name.startswith("ticket-"):
             return
+
+        # Статистика: счётчик сообщений во всех каналах (кроме тикетов, ботов).
+        conn = get_conn()
+        conn.execute(
+            "INSERT INTO member_stats (user_id, messages, voice_seconds, voice_joins) "
+            "VALUES (?, 1, 0, 0) "
+            "ON CONFLICT(user_id) DO UPDATE SET messages = messages + 1",
+            (message.author.id,),
+        )
+        conn.commit()
+
         if not can_get_message_xp(message.author.id, message.guild.id, XP_COOLDOWN_SECONDS):
             return
         amount = random.randint(MSG_XP_MIN, MSG_XP_MAX)
@@ -162,7 +172,7 @@ class LevelsCog(commands.Cog):
         if new_l != old_l:
             await self._level_up_msg(message.author, new_l)
 
-    # ---------- XP за голос ----------
+    # ---------- XP за голос + статистика ----------
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member: discord.Member, before, after):
@@ -175,13 +185,44 @@ class LevelsCog(commands.Cog):
 
         if joined:
             self._voice_sessions[member.id] = discord.utils.utcnow()
+            # Засчитываем заход даже в неактивный канал: voice_joins растёт.
+            conn = get_conn()
+            conn.execute(
+                "INSERT INTO member_stats (user_id, messages, voice_seconds, voice_joins) "
+                "VALUES (?, 0, 0, 1) "
+                "ON CONFLICT(user_id) DO UPDATE SET voice_joins = voice_joins + 1",
+                (member.id,),
+            )
+            conn.commit()
             return
+
+        # Активный голосовой канал: это не AFK-канал и не канал отключённого звука.
+        def _counts_as_active(vc, guild: discord.Guild):
+            if vc is None:
+                return False
+            if guild.afk_channel and vc.id == guild.afk_channel.id:
+                return False
+            cat = vc.category.name.lower() if vc.category else ""
+            if "afk" in cat or "афк" in cat:
+                return False
+            return True
 
         if left or switched:
             start = self._voice_sessions.pop(member.id, None)
             if start:
                 seconds = (discord.utils.utcnow() - start).total_seconds()
                 if seconds > 5:
+                    # Статистика: время в активных каналах.
+                    if _counts_as_active(before.channel, member.guild):
+                        conn = get_conn()
+                        conn.execute(
+                            "INSERT INTO member_stats (user_id, messages, voice_seconds, voice_joins) "
+                            "VALUES (?, 0, ?, 0) "
+                            "ON CONFLICT(user_id) DO UPDATE SET voice_seconds = voice_seconds + ?",
+                            (member.id, int(seconds), int(seconds)),
+                        )
+                        conn.commit()
+                    # XP — от времени одинаково во всех каналах.
                     xp = int(seconds * VOICE_XP_PER_SECOND)
                     old_l, new_l = add_xp(member.id, member.guild.id, xp)
                     if new_l != old_l:
@@ -211,6 +252,7 @@ class LevelsCog(commands.Cog):
             action = "добавлено"
         else:
             old_l, new_l = add_xp(user.id, interaction.guild.id, 0)
+            # Отнимаем напрямую через отрицательный xp невозможно — откат через БД
             conn = get_conn()
             conn.execute(
                 "UPDATE user_xp SET xp = MAX(0, xp - ?) WHERE user_id = ? AND guild_id = ?",
@@ -222,6 +264,7 @@ class LevelsCog(commands.Cog):
             if data:
                 from database import level_from_xp
                 new_l = level_from_xp(data[0])
+                # Сохраняем пересчитанный уровень, иначе лидерборд показывает устаревший.
                 conn.execute(
                     "UPDATE user_xp SET level = ? WHERE user_id = ? AND guild_id = ?",
                     (new_l, user.id, interaction.guild.id),

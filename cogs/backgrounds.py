@@ -26,18 +26,6 @@ def _bg_rows() -> list[dict]:
     ]
 
 
-def _grid_font() -> ImageFont.FreeTypeFont:
-    for p in (
-        os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fonts", "DejaVuSans.ttf"),
-        "C:\\Windows\\Fonts\\arial.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    ):
-        if os.path.isfile(p):
-            return ImageFont.truetype(p, 12)
-    return ImageFont.load_default()
-
-
 class BackgroundsCog(commands.Cog):
     """Управление фонами rank-карточки прямо из Discord (удобно на хостинге)."""
 
@@ -149,7 +137,7 @@ class BackgroundsCog(commands.Cog):
             img = img.resize((900, 280), Image.LANCZOS)
 
             draw = ImageDraw.Draw(img)
-            font = _grid_font()
+            font = ImageFont.truetype("C:\\Windows\\Fonts\\arial.ttf", 12)
             # Vertical grid every 50px
             for x in range(0, 900, 50):
                 draw.line([(x, 0), (x, 280)], fill=(255, 255, 0, 128), width=1)
