@@ -761,6 +761,29 @@ def get_giveaway(giveaway_id: int) -> dict | None:
     return dict(row) if row else None
 
 
+def get_giveaway_by_message(channel_id: int, message_id: int) -> dict | None:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT * FROM giveaways WHERE channel_id = ? AND message_id = ?",
+        (channel_id, message_id),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def insert_recovered_giveaway(channel_id: int, guild_id: int, prize: str, ends_at: str,
+                              winners: int, created_by: int, message_id: int) -> int:
+    """Восстанавливает розыгрыш, когда он пропал из БД, но сообщение на сервере ещё есть.
+    Сохраняет message_id для персистентной кнопки. Возвращает новый id."""
+    conn = get_conn()
+    cur = conn.execute(
+        "INSERT INTO giveaways (channel_id, guild_id, prize, ends_at, winners, created_by, message_id, done) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
+        (channel_id, guild_id, prize, ends_at, winners, created_by, message_id),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
 def set_giveaway_done(giveaway_id: int):
     conn = get_conn()
     conn.execute("UPDATE giveaways SET done = 1, finished_at = ? WHERE id = ?", (_utcnow(), giveaway_id))

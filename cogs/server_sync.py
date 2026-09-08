@@ -61,6 +61,14 @@ class ServerSyncCog(commands.Cog):
         log_server_event(guild.id, "sync_full", None, None, f"Участников: {len(guild.members)}")
         log.info("Полный синк %s завершён", guild.name)
 
+        # Восстановление розыгрышей, пропавших из БД, но оставшихся в каналах.
+        try:
+            gwa = self.bot.get_cog("GiveawayCog")
+            if gwa:
+                await gwa.recover_giveaways(guild)
+        except Exception as e:
+            log.error("Ошибка восстановления розыгрышей в %s: %s", guild.name, e)
+
     async def full_sync_all(self):
         for guild in self.bot.guilds:
             await self.sync_guild(guild)

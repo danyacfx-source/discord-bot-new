@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import random
 from datetime import datetime, timedelta, timezone
 
@@ -6,13 +7,17 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+log = logging.getLogger("giveaway")
+
 from database import (
     add_participant,
     create_giveaway,
     get_active_giveaways,
     get_giveaway,
+    get_giveaway_by_message,
     get_participant_count,
     get_participants,
+    insert_recovered_giveaway,
     set_giveaway_done,
     set_giveaway_message_id,
 )
@@ -151,6 +156,95 @@ class GiveawayCog(commands.Cog):
             end_dt = datetime.fromisoformat(g["ends_at"])
             if end_dt <= now:
                 await self._finish(g)
+
+    # ---------- Восстановление розыгрыша из канала ----------
+
+    async def recover_giveaways(self, guild: discord.Guild, limit: int = 200):
+        """Сканирует каналы гильдии в поисках эмбедов розыгрышей, которых нет в БД,
+        и воссоздаёт их активными (с персистентной кнопкой).
+
+        Бывших участников восстановить нельзя — только тех, кто нажмёт заново."""
+        recovered = 0
+        text_channels = [c for c in guild.text_channels]
+        for ch in text_channels:
+            try:
+                async for msg in ch.history(limit=limit):
+                    if msg.author.id != self.bot.user.id:
+                        continue
+                    embed = msg.embeds[0] if msg.embeds else None
+                    if embed is None or embed.title is None or "🎉" not in embed.title:
+                        continue
+                    footer_text = embed.footer.text if embed.footer else ""
+                    if "ID розыгрыша" not in footer_text:
+                        continue
+                    if get_giveaway_by_message(ch.id, msg.id):
+                        continue
+
+                    # Уже восстановлен и стоит кнопка — пропускаем.
+                    if msg.components and any(any(
+                        isinstance(c, discord.ui.Button) for c in row.children
+                    ) for row in msg.components):
+                        continue
+
+                    data = self._parse_giveaway_embed(embed)
+                    if data is None:
+                        continue
+                    gid = insert_recovered_giveaway(
+                        channel_id=ch.id,
+                        guild_id=guild.id,
+                        prize=data["prize"],
+                        ends_at=data["ends_at"],
+                        winners=data["winners"],
+                        created_by=data["created_by"],
+                        message_id=msg.id,
+                    )
+                    view = GiveawayView(gid)
+                    self._views[gid] = view
+                    try:
+                        await msg.edit(embed=_embed_for(get_giveaway(gid)), view=view)
+                        recovered += 1
+                    except Exception:
+                        pass
+            except (discord.Forbidden, discord.NotFound):
+                continue
+            except Exception:
+                continue
+        if recovered:
+            log.info("Восстановлено розыгрышей из каналов %s: %s", guild.name, recovered)
+        return recovered
+
+    @staticmethod
+    def _parse_giveaway_embed(embed: discord.Embed) -> dict | None:
+        """Разбирает эмбед розыгрыша: приз, окончание, победители, устроитель."""
+        title = embed.title or ""
+        if "🎉" in title:
+            prize = title.replace("🎉", "").strip()
+        else:
+            return None
+        desc = embed.description or ""
+        ends_at = None
+        winners = 1
+        created_by = None
+        import re
+        for line in desc.splitlines():
+            line = line.strip()
+            m = re.search(r"<t:(\d+):[RtfFdD]>", line)
+            if m and ends_at is None:
+                ends_at = datetime.fromtimestamp(int(m.group(1)), timezone.utc).isoformat()
+            m = re.search(r"Кол-во победителей: \*\*(\d+)\*\*", line)
+            if m:
+                winners = max(1, min(int(m.group(1)), 50))
+            m = re.search(r"Устроил: <@(\d+)>", line)
+            if m:
+                created_by = int(m.group(1))
+        if not ends_at or not created_by:
+            return None
+        return {
+            "prize": prize,
+            "ends_at": ends_at,
+            "winners": winners,
+            "created_by": created_by,
+        }
 
     # ---------- Команды ----------
 
