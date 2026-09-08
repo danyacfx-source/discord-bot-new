@@ -97,6 +97,26 @@ def init_db():
             fingerprint TEXT PRIMARY KEY,
             sent_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS giveaways (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id INTEGER NOT NULL,
+            guild_id INTEGER NOT NULL,
+            prize TEXT NOT NULL,
+            ends_at TEXT NOT NULL,
+            winners INTEGER DEFAULT 1,
+            created_by INTEGER NOT NULL,
+            message_id INTEGER DEFAULT 0,
+            done INTEGER DEFAULT 0,
+            finished_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS giveaway_participants (
+            giveaway_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            joined_at TEXT,
+            PRIMARY KEY (giveaway_id, user_id)
+        );
     """)
     conn.commit()
 
@@ -368,3 +388,65 @@ def try_claim_log(fingerprint: str, ttl_seconds: int = 6) -> bool:
         return True
     except sqlite3.IntegrityError:
         return False
+
+
+# --- Giveaways ---
+
+def create_giveaway(channel_id: int, guild_id: int, prize: str, ends_at: str, winners: int, created_by: int) -> int:
+    conn = get_conn()
+    cur = conn.execute(
+        "INSERT INTO giveaways (channel_id, guild_id, prize, ends_at, winners, created_by) VALUES (?, ?, ?, ?, ?, ?)",
+        (channel_id, guild_id, prize, ends_at, winners, created_by),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_active_giveaways() -> list[dict]:
+    conn = get_conn()
+    return [dict(r) for r in conn.execute("SELECT * FROM giveaways WHERE done = 0").fetchall()]
+
+
+def get_giveaway(giveaway_id: int) -> dict | None:
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM giveaways WHERE id = ?", (giveaway_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def set_giveaway_done(giveaway_id: int):
+    conn = get_conn()
+    conn.execute("UPDATE giveaways SET done = 1, finished_at = ? WHERE id = ?", (_utcnow(), giveaway_id))
+    conn.commit()
+
+
+def set_giveaway_message_id(giveaway_id: int, message_id: int):
+    conn = get_conn()
+    conn.execute("UPDATE giveaways SET message_id = ? WHERE id = ?", (message_id, giveaway_id))
+    conn.commit()
+
+
+def add_participant(giveaway_id: int, user_id: int) -> bool:
+    conn = get_conn()
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO giveaway_participants (giveaway_id, user_id) VALUES (?, ?)",
+        (giveaway_id, user_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def get_participants(giveaway_id: int) -> list[int]:
+    conn = get_conn()
+    return [r["user_id"] for r in conn.execute(
+        "SELECT user_id FROM giveaway_participants WHERE giveaway_id = ? ORDER BY joined_at",
+        (giveaway_id,),
+    ).fetchall()]
+
+
+def get_participant_count(giveaway_id: int) -> int:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT COUNT(*) AS c FROM giveaway_participants WHERE giveaway_id = ?",
+        (giveaway_id,),
+    ).fetchone()
+    return row["c"] if row else 0
