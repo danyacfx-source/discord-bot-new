@@ -165,7 +165,7 @@ class GiveawayCog(commands.Cog):
         prize="Что разыгрываем",
         length="Длительность (число)",
         unit="Единица времени: минуты / часы / дни",
-        winners="Сколько победителей (по умолчанию 1)",
+        winners="Количество призовых мест (победителей)",
         channel="Где создать розыгрыш (по умолчанию текущий канал)",
     )
     @app_commands.choices(unit=[
@@ -178,8 +178,8 @@ class GiveawayCog(commands.Cog):
         interaction: discord.Interaction,
         prize: str,
         length: int,
+        winners: int,
         unit: app_commands.Choice[str] = None,
-        winners: int = 1,
         channel: discord.TextChannel = None,
     ):
         if unit is None:
