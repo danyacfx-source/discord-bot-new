@@ -926,7 +926,7 @@ def remove_role(role_id: int):
 
 def get_roles(guild_id: int) -> list[dict]:
     conn = get_conn()
-    return [dict(r) for r in conn.execute("SELECT * FROM server_roles WHERE guild_id = ? ORDER BY position DESC").fetchall()]
+    return [dict(r) for r in conn.execute("SELECT * FROM server_roles WHERE guild_id = ? ORDER BY position DESC", (guild_id,)).fetchall()]
 
 
 def upsert_channel(channel_id: int, guild_id: int, name: str, ctype: str, category_id: int | None, position: int, topic: str | None):
@@ -947,7 +947,7 @@ def remove_channel(channel_id: int):
 
 def get_channels(guild_id: int) -> list[dict]:
     conn = get_conn()
-    return [dict(r) for r in conn.execute("SELECT * FROM server_channels WHERE guild_id = ? ORDER BY position").fetchall()]
+    return [dict(r) for r in conn.execute("SELECT * FROM server_channels WHERE guild_id = ? ORDER BY position", (guild_id,)).fetchall()]
 
 
 def log_server_event(guild_id: int, event_type: str, target_id: int | None, actor_id: int | None, details: str = "") -> int:
