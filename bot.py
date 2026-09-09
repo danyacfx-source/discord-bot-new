@@ -96,6 +96,8 @@ async def on_ready():
             pass
         _send_backup_to_channel(_backup_pending)
         _backup_pending = None
+    # Периодические бэкапы каждые 6-8 часов.
+    bot.loop.create_task(_periodic_backup_loop())
     # Persistent-кнопки (timeout=None) после рестарта нужно перерегистрировать,
     # иначе Discord присылает нажатие, а обработчика нет => «не ответило вовремя».
     try:
@@ -194,10 +196,22 @@ def _send_backup_to_channel(path: str) -> None:
 
 
 _backup_pending = None
-
-
-_backup_pending = None
 _fresh_db = False
+
+
+async def _periodic_backup_loop():
+    """Бэкап БД каждые 6-8 часов (случайный интервал), страховка от потери данных."""
+    import random
+    await asyncio.sleep(random.randint(6 * 3600, 8 * 3600))
+    while True:
+        try:
+            bak = automatic_backup()
+            if bak:
+                log.info("Периодический авто-бэкап БД создан: %s", bak)
+                _send_backup_to_channel(bak)
+        except Exception as e:
+            log.error("Ошибка периодического авто-бэкапа: %s", e)
+        await asyncio.sleep(random.randint(6 * 3600, 8 * 3600))
 
 
 async def main():
