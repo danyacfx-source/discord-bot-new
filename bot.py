@@ -18,6 +18,8 @@ from database import (
     release_lease,
     migrate_giveaways_from,
     automatic_backup,
+    close_all_connections,
+    db_file_exists,
 )
 
 logging.basicConfig(
@@ -52,10 +54,41 @@ async def _lease_heartbeat():
         await asyncio.sleep(10)
 
 
+async def _restore_db_from_channel() -> bool:
+    """Если на локальном диске БД пропала (обнова пересоздала папку),
+    вытаскивает последний бэкап wardogs_v2.*.db из резервного канала.
+    Возвращает True, если БД восстановлена."""
+    ch = bot.get_channel(config.BACKUP_CHANNEL_ID)
+    if ch is None:
+        return False
+    try:
+        async for msg in ch.history(limit=30):
+            if msg.author.id != bot.user.id:
+                continue
+            for att in msg.attachments:
+                if not att.filename.startswith("wardogs_v2.") or not att.filename.endswith(".db"):
+                    continue
+                data = await att.read()
+                close_all_connections()
+                with open("wardogs_v2.db", "wb") as f:
+                    f.write(data)
+                log.info("БД восстановлена из канала: %s (%d байт)", att.filename, len(data))
+                return True
+        log.warning("В канале %s не найдено бэкапов БД для восстановления", config.BACKUP_CHANNEL_ID)
+    except Exception as e:
+        log.error("Ошибка восстановления БД из канала: %s", e)
+    return False
+
+
 @bot.event
 async def on_ready():
-    global _backup_pending
+    global _backup_pending, _fresh_db
     log.info("%s запущен. Гильдий: %s (run_id=%s)", bot.user, len(bot.guilds), RUN_ID)
+    # БД была пустой (хостинг пересоздал папку) — возвращаем данные из канала.
+    if _fresh_db and config.BACKUP_CHANNEL_ID:
+        if await _restore_db_from_channel():
+            _fresh_db = False
+            log.info("БД восстановлена из резервного канала")
     if _backup_pending:
         try:
             await bot.wait_until_ready()
@@ -163,9 +196,18 @@ def _send_backup_to_channel(path: str) -> None:
 _backup_pending = None
 
 
+_backup_pending = None
+_fresh_db = False
+
+
 async def main():
+    # Хостинг мог пересоздать папку (кнопка «обновить с GitHub») и стереть БД.
+    # Восстановление из канала делается в on_ready (там клиент уже подключён),
+    # но факт «свежей пустой БД» фиксируем до init_db, чтобы не потерять сигнал.
+    global _fresh_db, _backup_pending
+    _fresh_db = not db_file_exists()
+
     # Страховка перед любыми изменениями: копия БД (с учётом WAL) в backups/.
-    global _backup_pending
     try:
         bak = automatic_backup()
         if bak:

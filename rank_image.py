@@ -23,12 +23,35 @@ TEXT_X = 270
 
 _FONT_CACHE: dict[int, ImageFont.FreeTypeFont] = {}
 
+# Кандидаты на шрифты для Windows / Linux / macOS + шрифты репозитория (fonts/).
+_FONT_CANDIDATES: tuple[tuple[str, str], ...] = (
+    ("fonts/DejaVuSans-Bold.ttf", "fonts/DejaVuSans.ttf"),
+    ("C:\\Windows\\Fonts\\arialbd.ttf", "C:\\Windows\\Fonts\\arial.ttf"),
+    ("C:\\Windows\\Fonts\\segoeuib.ttf", "C:\\Windows\\Fonts\\segoeui.ttf"),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    ("/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf", "/usr/share/fonts/dejavu/DejaVuSans.ttf"),
+    ("/System/Library/Fonts/SFNS.ttf", "/System/Library/Fonts/SFNS.ttf"),
+    ("/System/Library/Fonts/Supplemental/Arial Bold.ttf", "/System/Library/Fonts/Supplemental/Arial.ttf"),
+)
+
 
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     key = (size, bold)
-    if key not in _FONT_CACHE:
-        path = "C:\\Windows\\Fonts\\arialbd.ttf" if bold else "C:\\Windows\\Fonts\\arial.ttf"
-        _FONT_CACHE[key] = ImageFont.truetype(path, size)
+    if key in _FONT_CACHE:
+        return _FONT_CACHE[key]
+    resolved = None
+    for bold_path, normal_path in _FONT_CANDIDATES:
+        path = bold_path if bold else normal_path
+        if os.path.isfile(path):
+            resolved = path
+            break
+    try:
+        if resolved:
+            _FONT_CACHE[key] = ImageFont.truetype(resolved, size)
+        else:
+            _FONT_CACHE[key] = ImageFont.load_default()
+    except Exception:
+        _FONT_CACHE[key] = ImageFont.load_default()
     return _FONT_CACHE[key]
 
 

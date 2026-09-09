@@ -4,6 +4,8 @@ import threading
 
 DB_FILE = "wardogs_v2.db"
 _local = threading.local()
+_lock = threading.Lock()
+_conns: set[sqlite3.Connection] = set()
 
 
 def _utcnow() -> str:
@@ -22,7 +24,28 @@ def get_conn() -> sqlite3.Connection:
         _local.conn.row_factory = sqlite3.Row
         _local.conn.execute("PRAGMA journal_mode=WAL")
         _local.conn.execute("PRAGMA synchronous=NORMAL")
+        with _lock:
+            _conns.add(_local.conn)
     return _local.conn
+
+
+def close_all_connections():
+    """Закрывает все открытые соединения к БД (нужно перед заменой файла БД)."""
+    global _conns
+    with _lock:
+        for conn in list(_conns):
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
+        _conns = set()
+    _local.conn = None
+
+
+def db_file_exists() -> bool:
+    import os
+    return os.path.isfile(DB_FILE) or os.path.isfile(DB_FILE + "-wal") or os.path.isfile(DB_FILE + "-shm")
 
 
 def _ensure_column(conn, table: str, column: str, ddl: str):
