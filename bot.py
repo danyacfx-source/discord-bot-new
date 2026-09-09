@@ -82,20 +82,22 @@ async def _restore_db_from_channel() -> bool:
 
 @bot.event
 async def on_ready():
-    global _backup_pending, _fresh_db
+    global _fresh_db
     log.info("%s запущен. Гильдий: %s (run_id=%s)", bot.user, len(bot.guilds), RUN_ID)
     # БД была пустой (хостинг пересоздал папку) — возвращаем данные из канала.
     if _fresh_db and config.BACKUP_CHANNEL_ID:
         if await _restore_db_from_channel():
             _fresh_db = False
             log.info("БД восстановлена из резервного канала")
-    if _backup_pending:
-        try:
-            await bot.wait_until_ready()
-        except Exception:
-            pass
-        _send_backup_to_channel(_backup_pending)
-        _backup_pending = None
+    # Стартовый бэкап делаем СЕЙЧАС: БД уже точно существует и наполнена,
+    # а отправку делаем через fetch, чтобы канал гарантированно нашёлся.
+    try:
+        bak = automatic_backup()
+        if bak:
+            log.info("Стартовый авто-бэкап БД создан: %s", bak)
+            await _send_backup_to_channel(bak)
+    except Exception as e:
+        log.error("Ошибка стартового авто-бэкапа БД: %s", e)
     # Периодические бэкапы каждые 6-8 часов.
     bot.loop.create_task(_periodic_backup_loop())
     # Persistent-кнопки (timeout=None) после рестарта нужно перерегистрировать,
@@ -182,26 +184,35 @@ def _migrate_v1_giveaways():
             log.error("Ошибка миграции розыгрышей из %s: %s", path, e)
 
 
-def _send_backup_to_channel(path: str) -> None:
-    """Отправка копии БД в резервный канал (если BACKUP_CHANNEL_ID задан)."""
+async def _send_backup_to_channel(path: str) -> bool:
+    """Отправка копии БД в резервный канал (если BACKUP_CHANNEL_ID задан).
+    Возвращает True при успехе."""
     import os
-    ch = bot.get_channel(config.BACKUP_CHANNEL_ID)
-    if ch is None or not path:
-        return
-    async def _do_send():
+    if not path:
+        return False
+    if not config.BACKUP_CHANNEL_ID:
+        log.warning("BACKUP_CHANNEL_ID не задан — бэкап не отправлен в Discord (файл остался в backups/): %s", path)
+        return False
+    try:
+        ch = bot.get_channel(config.BACKUP_CHANNEL_ID)
+        if ch is None:
+            ch = await bot.fetch_channel(config.BACKUP_CHANNEL_ID)
+    except Exception as e:
+        log.error("Не удалось получить резервный канал %s: %s", config.BACKUP_CHANNEL_ID, e)
+        return False
+    try:
         with open(path, "rb") as f:
             await ch.send(
                 content="Авто-бэкап БД",
                 file=discord.File(f, filename=os.path.basename(path)),
             )
-    try:
-        asyncio.create_task(_do_send())
-        log.info("Бэкап БД отправляется в канал %s: %s", config.BACKUP_CHANNEL_ID, path)
+        log.info("Бэкап БД отправлен в канал %s: %s", config.BACKUP_CHANNEL_ID, path)
+        return True
     except Exception as e:
         log.error("Ошибка отправки бэкапа в канал %s: %s", config.BACKUP_CHANNEL_ID, e)
+        return False
 
 
-_backup_pending = None
 _fresh_db = False
 
 
@@ -214,7 +225,7 @@ async def _periodic_backup_loop():
             bak = automatic_backup()
             if bak:
                 log.info("Периодический авто-бэкап БД создан: %s", bak)
-                _send_backup_to_channel(bak)
+                await _send_backup_to_channel(bak)
         except Exception as e:
             log.error("Ошибка периодического авто-бэкапа: %s", e)
         await asyncio.sleep(random.randint(6 * 3600, 8 * 3600))
@@ -224,17 +235,8 @@ async def main():
     # Хостинг мог пересоздать папку (кнопка «обновить с GitHub») и стереть БД.
     # Восстановление из канала делается в on_ready (там клиент уже подключён),
     # но факт «свежей пустой БД» фиксируем до init_db, чтобы не потерять сигнал.
-    global _fresh_db, _backup_pending
+    global _fresh_db
     _fresh_db = not db_file_exists()
-
-    # Страховка перед любыми изменениями: копия БД (с учётом WAL) в backups/.
-    try:
-        bak = automatic_backup()
-        if bak:
-            log.info("Авто-бэкап БД создан: %s", bak)
-            _backup_pending = bak
-    except Exception as e:
-        log.error("Ошибка авто-бэкапа БД: %s", e)
 
     init_db()
     _migrate_v1_giveaways()
