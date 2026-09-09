@@ -772,8 +772,8 @@ def release_lease(run_id: str) -> None:
 
 def automatic_backup(max_kept: int = 30) -> str | None:
     """Создаёт копию текущей БД (с учётом WAL) в папке backups/.
-    Возвращает путь к бэкапу или None. Старые копии сверх max_kept удаляются.
-    Вызывается при каждом запуске бота — страховка на случай сбоев при обновлении."""
+    Возвращает путь к бэкапу или None. Старые копии сверх max_kept удаляются."""
+    import os
     import shutil
     from datetime import datetime, timezone
     try:
@@ -788,7 +788,6 @@ def automatic_backup(max_kept: int = 30) -> str | None:
             src.backup(dst)
         finally:
             dst.close()
-        conn.commit()
 
         # Очистка старых бэкапов (по времени создания имени).
         files = sorted(
