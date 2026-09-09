@@ -125,7 +125,7 @@ class TicketCloseView(discord.ui.View):
     @discord.ui.button(label="Закрыть тикет", style=discord.ButtonStyle.red, custom_id="tk2_close", emoji="🔒")
     async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(
-            "Вы уверены?", view=TicketCloseConfirmView(), ephemeral=True
+            "Вы уверены?", view=TicketCloseConfirmView()
         )
 
 
@@ -149,14 +149,27 @@ class TicketCloseConfirmView(discord.ui.View):
             conn.commit()
             member = interaction.guild.get_member(row["user_id"])
             if member:
+                # Автор тикета больше не видит канал.
                 await interaction.channel.set_permissions(member, overwrite=None)
+            # Дублируем «слепоту» через @everyone-перезапись как страховку
+            # (если права давались не только явным override).
+            await interaction.channel.set_permissions(
+                interaction.guild.default_role, view_channel=False
+            )
+            # Персонал оставляет доступ после закрытия.
+            for staff_role_id in config.TICKET_STAFF_ROLES:
+                staff = interaction.guild.get_role(staff_role_id)
+                if staff:
+                    await interaction.channel.set_permissions(
+                        staff, view_channel=True, send_messages=False, read_message_history=True
+                    )
 
         embed = discord.Embed(
             title="Тикет закрыт",
             description=f"Закрыл: {interaction.user.mention}\nСохраните транскрипт или удалите канал.",
             color=discord.Color.greyple(),
         )
-        await interaction.edit_original_response(embed=embed, view=TicketClosedView())
+        await interaction.message.edit(embed=embed, view=TicketClosedView())
 
         if config.TICKET_LOG_CHANNEL:
             log_ch = interaction.guild.get_channel(config.TICKET_LOG_CHANNEL)

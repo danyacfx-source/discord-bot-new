@@ -115,7 +115,7 @@ class ClanTicketCloseView(discord.ui.View):
     @discord.ui.button(label="Закрыть заявку", style=discord.ButtonStyle.red, custom_id="ck_close", emoji="🔒")
     async def close_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(
-            "Вы уверены?", view=ClanTicketCloseConfirmView(), ephemeral=True
+            "Вы уверены?", view=ClanTicketCloseConfirmView()
         )
 
 
@@ -139,14 +139,26 @@ class ClanTicketCloseConfirmView(discord.ui.View):
             conn.commit()
             member = interaction.guild.get_member(row["user_id"])
             if member:
+                # Автор заявки больше не видит канал.
                 await interaction.channel.set_permissions(member, overwrite=None)
+            # Страховка через @everyone.
+            await interaction.channel.set_permissions(
+                interaction.guild.default_role, view_channel=False
+            )
+            # Персонал оставляет доступ после закрытия.
+            for staff_role_id in config.CLAN_TICKET_STAFF_ROLES:
+                staff = interaction.guild.get_role(staff_role_id)
+                if staff:
+                    await interaction.channel.set_permissions(
+                        staff, view_channel=True, send_messages=False, read_message_history=True
+                    )
 
         embed = discord.Embed(
             title="Заявка закрыта",
             description=f"Закрыл: {interaction.user.mention}\nСохраните транскрипт или удалите канал.",
             color=discord.Color.greyple(),
         )
-        await interaction.edit_original_response(embed=embed, view=ClanTicketClosedView())
+        await interaction.message.edit(embed=embed, view=ClanTicketClosedView())
 
         if config.CLAN_TICKET_LOG_CHANNEL:
             log_ch = interaction.guild.get_channel(config.CLAN_TICKET_LOG_CHANNEL)
