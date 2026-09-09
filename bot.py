@@ -134,6 +134,12 @@ async def on_ready():
         log.info("Persistent-кнопки панели войсов перерегистрированы")
     except Exception as e:
         log.error("Ошибка регистрации persistent-кнопок войсов: %s", e)
+    try:
+        from cogs.embed import EmbedBuilderView
+        bot.add_view(EmbedBuilderView())
+        log.info("Persistent-кнопки конструктора эмбеда перерегистрированы")
+    except Exception as e:
+        log.error("Ошибка регистрации persistent-кнопок эмбеда: %s", e)
     # Глобальный sync — команды видны и на серверах, и в ЛС бота.
     # Серверные команды (guild_only) не показываются в ЛС автоматически.
     try:
@@ -158,6 +164,7 @@ COGS = [
     "cogs.server_sync",
     "cogs.giveaway",
     "cogs.clan_tickets",
+    "cogs.embed",
 ]
 
 
