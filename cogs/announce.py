@@ -106,11 +106,12 @@ class ChannelSelectView(discord.ui.View):
 
     async def _on_select(self, interaction: discord.Interaction):
         channel_id = int(interaction.data["values"][0])
-        channel = interaction.guild.get_channel(channel_id)
+        # В ЛС interaction.guild = None, поэтому берём гильдию из view (self.guild).
+        channel = self.guild.get_channel(channel_id)
         if channel is None:
             return await interaction.response.send_message("❌ Канал не найден.", ephemeral=True)
         # Запоминаем канал в БД: persistent-кнопка «Отправить» должна пережить рестарт.
-        set_announce_channel(interaction.user.id, channel.id, interaction.guild.id)
+        set_announce_channel(interaction.user.id, channel.id, self.guild.id)
         await interaction.response.send_message(
             f"**Шаг 3:** Напишите текст **в этот личный чат** и/или прикрепите "
             f"фото/видео/GIF файлом, затем нажмите кнопку.\n📍 Канал: **#{channel.name}**",
