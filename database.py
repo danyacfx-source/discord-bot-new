@@ -205,6 +205,13 @@ def init_db():
             created_at TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_server_events_guild ON server_events(guild_id, created_at);
+
+        CREATE TABLE IF NOT EXISTS announce_pending (
+            user_id INTEGER PRIMARY KEY,
+            channel_id INTEGER NOT NULL,
+            guild_id INTEGER NOT NULL,
+            updated_at TEXT
+        );
     """)
     conn.commit()
 
@@ -976,3 +983,30 @@ def get_recent_events(guild_id: int, limit: int = 50) -> list[dict]:
         "SELECT * FROM server_events WHERE guild_id = ? ORDER BY id DESC LIMIT ?",
         (guild_id, limit),
     ).fetchall()]
+
+
+# --- Announce (ЛС-панель: выбор канала для persistent-кнопки «Отправить») ---
+
+def set_announce_channel(user_id: int, channel_id: int, guild_id: int) -> None:
+    conn = get_conn()
+    conn.execute(
+        "INSERT INTO announce_pending (user_id, channel_id, guild_id, updated_at) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(user_id) DO UPDATE SET channel_id = excluded.channel_id, guild_id = excluded.guild_id, updated_at = excluded.updated_at",
+        (user_id, channel_id, guild_id, _utcnow()),
+    )
+    conn.commit()
+
+
+def get_announce_channel(user_id: int) -> dict | None:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT channel_id, guild_id FROM announce_pending WHERE user_id = ?",
+        (user_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def clear_announce_channel(user_id: int) -> None:
+    conn = get_conn()
+    conn.execute("DELETE FROM announce_pending WHERE user_id = ?", (user_id,))
+    conn.commit()

@@ -7,6 +7,12 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from database import (
+    clear_announce_channel,
+    get_announce_channel,
+    set_announce_channel,
+)
+
 
 class GuildSelectView(discord.ui.View):
     def __init__(self, guilds: list[discord.Guild]):
@@ -103,6 +109,8 @@ class ChannelSelectView(discord.ui.View):
         channel = interaction.guild.get_channel(channel_id)
         if channel is None:
             return await interaction.response.send_message("❌ Канал не найден.", ephemeral=True)
+        # Запоминаем канал в БД: persistent-кнопка «Отправить» должна пережить рестарт.
+        set_announce_channel(interaction.user.id, channel.id, interaction.guild.id)
         await interaction.response.send_message(
             f"**Шаг 3:** Напишите текст **в этот личный чат** и/или прикрепите "
             f"фото/видео/GIF файлом, затем нажмите кнопку.\n📍 Канал: **#{channel.name}**",
@@ -111,13 +119,28 @@ class ChannelSelectView(discord.ui.View):
 
 
 class ChannelReadyView(discord.ui.View):
-    def __init__(self, channel: discord.TextChannel):
+    """Persistent-кнопка «Отправить». После рестарта пересоздаётся в on_ready
+    с channel=None, а целевой канал достаётся из БД по user_id."""
+
+    def __init__(self, channel: discord.TextChannel | None = None):
         super().__init__(timeout=None)
         self.channel = channel
 
     @discord.ui.button(label="🚀 Отправить", style=discord.ButtonStyle.green, custom_id="ann2_send")
     async def send_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(SendMessageModal(self.channel))
+        channel = self.channel
+        if channel is None:
+            saved = get_announce_channel(interaction.user.id)
+            if saved:
+                guild = interaction.client.get_guild(saved["guild_id"])
+                channel = guild.get_channel(saved["channel_id"]) if guild else None
+        if channel is None:
+            clear_announce_channel(interaction.user.id)
+            return await interaction.response.send_message(
+                "❌ Канал не найден. Начните заново: напишите «старт» в личку бота.",
+                ephemeral=True,
+            )
+        await interaction.response.send_modal(SendMessageModal(channel))
 
 
 class SendMessageModal(discord.ui.Modal, title="Отправка сообщения"):
@@ -156,6 +179,7 @@ class SendMessageModal(discord.ui.Modal, title="Отправка сообщен�
             await interaction.response.send_message(
                 f"✅ Отправлено в **#{self.channel.name}**.", ephemeral=True
             )
+            clear_announce_channel(interaction.user.id)
         except Exception as e:
             await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 

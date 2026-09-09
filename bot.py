@@ -64,6 +64,12 @@ async def on_ready():
         log.info("Persistent-кнопки тикетов перерегистрированы")
     except Exception as e:
         log.error("Ошибка регистрации persistent-кнопок тикетов: %s", e)
+    try:
+        from cogs.announce import ChannelReadyView
+        bot.add_view(ChannelReadyView())
+        log.info("Persistent-кнопка выдающий «Отправить» перерегистрирована")
+    except Exception as e:
+        log.error("Ошибка регистрации persistent-кнопки «Отправить»: %s", e)
     # Глобальный sync — команды видны и на серверах, и в ЛС бота.
     # Серверные команды (guild_only) не показываются в ЛС автоматически.
     try:
