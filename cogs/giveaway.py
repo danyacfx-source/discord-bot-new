@@ -91,11 +91,28 @@ class GiveawayCog(commands.Cog):
     # ---------- Автоподведение итогов ----------
 
     async def cog_load(self):
+        await self.reload_views()
+        self._check_task = asyncio.create_task(self._check_loop())
+
+    async def reload_views(self):
+        """Пере-регистрирует persistent-кнопки активных розыгрышей.
+        Нужно вызывать заново после восстановления БД из канала в on_ready,
+        иначе кнопки на восстановленных розыгрышах не отвечают."""
+        for gid, view in list(self._views.items()):
+            try:
+                self.bot.remove_view(view)
+            except Exception:
+                pass
+        self._views.clear()
         for g in get_active_giveaways():
             view = GiveawayView(g["id"])
             self._views[g["id"]] = view
-            self.bot.add_view(view)
-        self._check_task = asyncio.create_task(self._check_loop())
+            try:
+                self.bot.add_view(view)
+            except Exception:
+                pass
+        if self._views:
+            log.info("Зарегистрировано кнопок розыгрышей: %d", len(self._views))
 
     async def _check_loop(self):
         await self.bot.wait_until_ready()

@@ -89,6 +89,14 @@ async def on_ready():
         if await _restore_db_from_channel():
             _fresh_db = False
             log.info("БД восстановлена из резервного канала")
+            # Кнопки розыгрышей регистрируются при загрузке кога (по пустой БД).
+            # После восстановления БД — пере-регистрируем, иначе кнопки не отвечают.
+            try:
+                cog = bot.get_cog("GiveawayCog")
+                if cog and hasattr(cog, "reload_views"):
+                    await cog.reload_views()
+            except Exception as e:
+                log.error("Ошибка пере-регистрации кнопок розыгрыша: %s", e)
     # Стартовый бэкап делаем СЕЙЧАС: БД уже точно существует и наполнена,
     # а отправку делаем через fetch, чтобы канал гарантированно нашёлся.
     try:
