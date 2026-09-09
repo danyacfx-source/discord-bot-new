@@ -70,6 +70,18 @@ async def on_ready():
         log.info("Persistent-кнопка выдающий «Отправить» перерегистрирована")
     except Exception as e:
         log.error("Ошибка регистрации persistent-кнопки «Отправить»: %s", e)
+    try:
+        from cogs.clan_tickets import (
+            ClanTicketClosedView,
+            ClanTicketCloseView,
+            ClanTicketPanelView,
+        )
+        bot.add_view(ClanTicketPanelView())
+        bot.add_view(ClanTicketCloseView())
+        bot.add_view(ClanTicketClosedView())
+        log.info("Persistent-кнопки клановых тикетов перерегистрированы")
+    except Exception as e:
+        log.error("Ошибка регистрации persistent-кнопок кланов: %s", e)
     # Глобальный sync — команды видны и на серверах, и в ЛС бота.
     # Серверные команды (guild_only) не показываются в ЛС автоматически.
     try:
@@ -93,6 +105,7 @@ COGS = [
     "cogs.automod",
     "cogs.server_sync",
     "cogs.giveaway",
+    "cogs.clan_tickets",
 ]
 
 
