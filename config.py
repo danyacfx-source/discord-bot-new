@@ -34,6 +34,9 @@ def _ints(name: str) -> list[int]:
 TOKEN = os.getenv("DISCORD_TOKEN", "")
 GUILD_ID = _int("GUILD_ID")
 
+# Бэкап БД: канал, куда при каждом запуске отправляется копия wardogs_v2.db
+BACKUP_CHANNEL_ID = _int("BACKUP_CHANNEL_ID")
+
 # Тикеты
 TICKET_GUILD_ID = _int("TICKET_GUILD_ID", GUILD_ID)
 TICKET_CATEGORY = _int("TICKET_CATEGORY")

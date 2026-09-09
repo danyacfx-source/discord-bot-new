@@ -17,6 +17,7 @@ from database import (
     renew_lease,
     release_lease,
     migrate_giveaways_from,
+    automatic_backup,
 )
 
 logging.basicConfig(
@@ -53,7 +54,15 @@ async def _lease_heartbeat():
 
 @bot.event
 async def on_ready():
+    global _backup_pending
     log.info("%s запущен. Гильдий: %s (run_id=%s)", bot.user, len(bot.guilds), RUN_ID)
+    if _backup_pending:
+        try:
+            await bot.wait_until_ready()
+        except Exception:
+            pass
+        _send_backup_to_channel(_backup_pending)
+        _backup_pending = None
     # Persistent-кнопки (timeout=None) после рестарта нужно перерегистрировать,
     # иначе Discord присылает нажатие, а обработчика нет => «не ответило вовремя».
     try:
@@ -132,7 +141,39 @@ def _migrate_v1_giveaways():
             log.error("Ошибка миграции розыгрышей из %s: %s", path, e)
 
 
+def _send_backup_to_channel(path: str) -> None:
+    """Отправка копии БД в резервный канал (если BACKUP_CHANNEL_ID задан)."""
+    import os
+    ch = bot.get_channel(config.BACKUP_CHANNEL_ID)
+    if ch is None or not path:
+        return
+    async def _do_send():
+        with open(path, "rb") as f:
+            await ch.send(
+                content="Авто-бэкап БД",
+                file=discord.File(f, filename=os.path.basename(path)),
+            )
+    try:
+        asyncio.create_task(_do_send())
+        log.info("Бэкап БД отправляется в канал %s: %s", config.BACKUP_CHANNEL_ID, path)
+    except Exception as e:
+        log.error("Ошибка отправки бэкапа в канал %s: %s", config.BACKUP_CHANNEL_ID, e)
+
+
+_backup_pending = None
+
+
 async def main():
+    # Страховка перед любыми изменениями: копия БД (с учётом WAL) в backups/.
+    global _backup_pending
+    try:
+        bak = automatic_backup()
+        if bak:
+            log.info("Авто-бэкап БД создан: %s", bak)
+            _backup_pending = bak
+    except Exception as e:
+        log.error("Ошибка авто-бэкапа БД: %s", e)
+
     init_db()
     _migrate_v1_giveaways()
 

@@ -745,6 +745,43 @@ def release_lease(run_id: str) -> None:
     conn.commit()
 
 
+# --- Автоматический бэкап БД при старте ---
+
+def automatic_backup(max_kept: int = 30) -> str | None:
+    """Создаёт копию текущей БД (с учётом WAL) в папке backups/.
+    Возвращает путь к бэкапу или None. Старые копии сверх max_kept удаляются.
+    Вызывается при каждом запуске бота — страховка на случай сбоев при обновлении."""
+    import shutil
+    from datetime import datetime, timezone
+    try:
+        bak_dir = os.path.join(os.getcwd(), "backups")
+        os.makedirs(bak_dir, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        dest = os.path.join(bak_dir, f"wardogs_v2.{stamp}.db")
+
+        src = get_conn()
+        dst = sqlite3.connect(dest)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+        conn.commit()
+
+        # Очистка старых бэкапов (по времени создания имени).
+        files = sorted(
+            f for f in os.listdir(bak_dir)
+            if f.startswith("wardogs_v2.") and f.endswith(".db")
+        )
+        for f in files[:-max_kept]:
+            try:
+                os.remove(os.path.join(bak_dir, f))
+            except OSError:
+                pass
+        return dest
+    except Exception:
+        return None
+
+
 # --- Giveaways ---
 
 def create_giveaway(channel_id: int, guild_id: int, prize: str, ends_at: str, winners: int, created_by: int) -> int:
