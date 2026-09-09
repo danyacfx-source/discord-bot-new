@@ -160,17 +160,17 @@ class SendMessageModal(discord.ui.Modal, title="Отправка сообщен�
         try:
             content = self.text.value.strip() if self.text.value else None
             files = []
-            fallback = None
-            # Ищем последнее сообщение с вложениями в этом ЛС.
-            async for msg in interaction.channel.history(limit=10):
-                if msg.attachments:
-                    for att in msg.attachments:
-                        files.append(await att.to_file())
-                    fallback = msg.content.strip()
-                    break
+            # Собираем последние сообщения автора в этом ЛС (текст + все вложения).
+            async for msg in interaction.channel.history(limit=20):
+                if msg.author.id != interaction.user.id:
+                    continue
+                for att in msg.attachments:
+                    files.append(await att.to_file())
+                if content is None and msg.content and msg.content.strip():
+                    content = msg.content.strip()
 
-            if not content and fallback:
-                content = fallback
+            if not content:
+                content = None
             if not content and not files:
                 return await interaction.response.send_message(
                     "❌ Пустое сообщение — напишите текст или прикрепите файл.", ephemeral=True
