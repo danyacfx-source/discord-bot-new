@@ -34,8 +34,10 @@ def _ints(name: str) -> list[int]:
 TOKEN = os.getenv("DISCORD_TOKEN", "")
 GUILD_ID = _int("GUILD_ID")
 
-# Бэкап БД: канал, куда при каждом запуске отправляется копия wardogs_v2.db
-BACKUP_CHANNEL_ID = _int("BACKUP_CHANNEL_ID")
+# Бэкап БД: канал, куда при каждом запуске и каждые 6-8 часов отправляется копия wardogs_v2.db.
+# Захардкожен, чтобы переживать обновы (кнопка на хостинге сносит .env).
+# Можно переопределить через BACKUP_CHANNEL_ID в .env.
+BACKUP_CHANNEL_ID = _int("BACKUP_CHANNEL_ID", 1547050639677202433)
 
 # Тикеты
 TICKET_GUILD_ID = _int("TICKET_GUILD_ID", GUILD_ID)
