@@ -113,11 +113,17 @@ def _migrate_v1_giveaways():
     """Перенос активных розыгрышей из БД v1 (если найдена рядом).
     Позволяет идущему розыгрышу не отвалиться при переезде бота на v2."""
     import glob
-    candidates = ["wardogs.db"]
-    candidates += glob.glob("бот WARDOGS/wardogs.db")
-    candidates += glob.glob("../бот WARDOGS/wardogs.db")
-    candidates += glob.glob("**/wardogs.db")
+    import os
+    own = os.path.abspath("wardogs_v2.db")
+    candidates = set()
+    for pat in ("*.db", "../*.db", "бот WARDOGS/*.db", "**/бот WARDOGS/*.db"):
+        try:
+            candidates.update(glob.glob(pat, recursive=True))
+        except Exception:
+            pass
     for path in candidates:
+        if not path or os.path.abspath(path) == own:
+            continue
         try:
             moved = migrate_giveaways_from(path)
             if moved:
