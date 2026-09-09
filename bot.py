@@ -126,6 +126,12 @@ async def on_ready():
         log.info("Persistent-кнопки клановых тикетов перерегистрированы")
     except Exception as e:
         log.error("Ошибка регистрации persistent-кнопок кланов: %s", e)
+    try:
+        from cogs.temp_voice import VoiceControlPanelView
+        bot.add_view(VoiceControlPanelView())
+        log.info("Persistent-кнопки панели войсов перерегистрированы")
+    except Exception as e:
+        log.error("Ошибка регистрации persistent-кнопок войсов: %s", e)
     # Глобальный sync — команды видны и на серверах, и в ЛС бота.
     # Серверные команды (guild_only) не показываются в ЛС автоматически.
     try:

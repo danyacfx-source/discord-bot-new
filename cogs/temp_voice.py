@@ -37,7 +37,11 @@ def _get_managed_vc(interaction: discord.Interaction):
     vc = interaction.user.voice.channel
     if _is_trigger(vc) or not _is_managed(vc.category_id):
         return None, "Этот канал не управляется."
-    if temp_channel_owners.get(vc.id) != interaction.user.id:
+    owner_id = temp_channel_owners.get(vc.id)
+    if owner_id is None:
+        # Владелец мог пропасть после рестарта бота — управлять может любой в канале.
+        return vc, None
+    if owner_id != interaction.user.id:
         return None, "Только владелец канала может управлять."
     return vc, None
 
@@ -268,6 +272,16 @@ class TempVoiceCog(commands.Cog):
 
         for guild in self.bot.guilds:
             await self._reap_empty_temp(guild)
+            # Восстанавливаем владельцев переживших рестарт временных каналов.
+            category = guild.get_channel(config.VC_CATEGORY)
+            if category:
+                for ch in category.voice_channels:
+                    if _is_trigger(ch) or ch.id in temp_channel_owners:
+                        continue
+                    humans = [m for m in ch.members if not m.bot]
+                    if humans:
+                        temp_channel_owners[ch.id] = humans[0].id
+                        log.info("Владелец восстановлен для %s → %s", ch.name, humans[0].display_name)
             trigger = guild.get_channel(config.VC_TRIGGER_CHANNEL)
             if trigger and any(not m.bot for m in trigger.members):
                 first = next(m for m in trigger.members if not m.bot)
