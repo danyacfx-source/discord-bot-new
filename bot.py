@@ -119,12 +119,6 @@ async def on_ready():
     except Exception as e:
         log.error("Ошибка регистрации persistent-кнопок тикетов: %s", e)
     try:
-        from cogs.announce import ChannelReadyView
-        bot.add_view(ChannelReadyView())
-        log.info("Persistent-кнопка выдающий «Отправить» перерегистрирована")
-    except Exception as e:
-        log.error("Ошибка регистрации persistent-кнопки «Отправить»: %s", e)
-    try:
         from cogs.clan_tickets import (
             ClanTicketClosedView,
             ClanTicketCloseView,

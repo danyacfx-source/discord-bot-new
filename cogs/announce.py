@@ -3,6 +3,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import logging
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -12,6 +13,8 @@ from database import (
     get_announce_channel,
     set_announce_channel,
 )
+
+log = logging.getLogger("announce")
 
 
 class GuildSelectView(discord.ui.View):
@@ -110,84 +113,20 @@ class ChannelSelectView(discord.ui.View):
         channel = self.guild.get_channel(channel_id)
         if channel is None:
             return await interaction.response.send_message("❌ Канал не найден.", ephemeral=True)
-        # Запоминаем канал в БД: persistent-кнопка «Отправить» должна пережить рестарт.
+        # Запоминаем канал в БД: шаг с текстом/картинкой переживает рестарт бота.
         set_announce_channel(interaction.user.id, channel.id, self.guild.id)
         await interaction.response.send_message(
-            f"**Шаг 3:** Напишите текст **в этот личный чат** и/или прикрепите "
-            f"фото/видео/GIF файлом, затем нажмите кнопку.\n📍 Канал: **#{channel.name}**",
-            view=ChannelReadyView(channel),
+            f"**Шаг 3:** Напишите **текст** объявления в этот личный чат.\n"
+            f"📍 Канал: **#{channel.name}**\n"
+            f"После текста бот попросит прислать картинку."
         )
-
-
-class ChannelReadyView(discord.ui.View):
-    """Persistent-кнопка «Отправить». После рестарта пересоздаётся в on_ready
-    с channel=None, а целевой канал достаётся из БД по user_id."""
-
-    def __init__(self, channel: discord.TextChannel | None = None):
-        super().__init__(timeout=None)
-        self.channel = channel
-
-    @discord.ui.button(label="🚀 Отправить", style=discord.ButtonStyle.green, custom_id="ann2_send")
-    async def send_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        channel = self.channel
-        if channel is None:
-            saved = get_announce_channel(interaction.user.id)
-            if saved:
-                guild = interaction.client.get_guild(saved["guild_id"])
-                channel = guild.get_channel(saved["channel_id"]) if guild else None
-        if channel is None:
-            clear_announce_channel(interaction.user.id)
-            return await interaction.response.send_message(
-                "❌ Канал не найден. Начните заново: напишите «старт» в личку бота.",
-                ephemeral=True,
-            )
-        await interaction.response.send_modal(SendMessageModal(channel))
-
-
-class SendMessageModal(discord.ui.Modal, title="Отправка сообщения"):
-    text = discord.ui.TextInput(
-        label="Текст (если не написали в чате)",
-        style=discord.TextStyle.paragraph,
-        required=False,
-        max_length=2000,
-    )
-
-    def __init__(self, channel: discord.TextChannel):
-        super().__init__()
-        self.channel = channel
-
-    async def on_submit(self, interaction: discord.Interaction):
-        try:
-            content = self.text.value.strip() if self.text.value else None
-            files = []
-            # Собираем последние сообщения автора в этом ЛС (текст + все вложения).
-            async for msg in interaction.channel.history(limit=20):
-                if msg.author.id != interaction.user.id:
-                    continue
-                for att in msg.attachments:
-                    files.append(await att.to_file())
-                if content is None and msg.content and msg.content.strip():
-                    content = msg.content.strip()
-
-            if not content:
-                content = None
-            if not content and not files:
-                return await interaction.response.send_message(
-                    "❌ Пустое сообщение — напишите текст или прикрепите файл.", ephemeral=True
-                )
-
-            await self.channel.send(content=content, files=files if files else None)
-            await interaction.response.send_message(
-                f"✅ Отправлено в **#{self.channel.name}**.", ephemeral=True
-            )
-            clear_announce_channel(interaction.user.id)
-        except Exception as e:
-            await interaction.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
 
 
 class AnnounceCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        # Чат-мастер: user_id -> {"channel_id", "guild_id", "phase": "text"|"image", "text"}
+        self._state: dict[int, dict] = {}
 
     def _admin_guilds(self, user_id: int) -> list[discord.Guild]:
         out = []
@@ -199,6 +138,30 @@ class AnnounceCog(commands.Cog):
                 out.append(guild)
         return out
 
+    async def _finish(self, message: discord.Message, st: dict, attachments: list[discord.Attachment]):
+        """Публикуем готовое объявление (текст + файлы) и сбрасываем мастер."""
+        channel = None
+        guild = self.bot.get_guild(st["guild_id"])
+        if guild:
+            channel = guild.get_channel(st["channel_id"])
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(st["channel_id"])
+            except Exception:
+                channel = None
+        if channel is None:
+            clear_announce_channel(message.author.id)
+            self._state.pop(message.author.id, None)
+            return await message.channel.send(
+                "❌ Канал не найден. Начните заново: напишите «старт» в личку бота."
+            )
+
+        files = [await a.to_file() for a in attachments]
+        await channel.send(content=st["text"], files=files if files else None)
+        clear_announce_channel(message.author.id)
+        self._state.pop(message.author.id, None)
+        await message.channel.send(f"✅ Отправлено в **#{channel.name}**.")
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if not isinstance(message.channel, discord.DMChannel) or message.author.bot:
@@ -208,10 +171,42 @@ class AnnounceCog(commands.Cog):
             guilds = self._admin_guilds(message.author.id)
             if not guilds:
                 return await message.channel.send("❌ Нет прав администратора ни на одном сервере!")
-            await message.channel.send(
+            self._state.pop(message.author.id, None)
+            clear_announce_channel(message.author.id)
+            return await message.channel.send(
                 "⚙️ **Панель отправки сообщений**\n**Шаг 1:** Выберите сервер:",
                 view=GuildSelectView(guilds),
             )
+
+        # Продолжение мастера. Если state потерян (рестарт), берём канал из БД.
+        st = self._state.get(message.author.id)
+        if st is None:
+            saved = get_announce_channel(message.author.id)
+            if not saved:
+                return
+            st = {
+                "channel_id": saved["channel_id"],
+                "guild_id": saved["guild_id"],
+                "phase": "text",
+                "text": None,
+            }
+            self._state[message.author.id] = st
+
+        if st["phase"] == "text":
+            if not text:
+                return await message.channel.send("🗒️ Сначала напишите **текст** объявления.")
+            st["text"] = text
+            if message.attachments:
+                return await self._finish(message, st, list(message.attachments))
+            st["phase"] = "image"
+            return await message.channel.send(
+                "🖼️ **Шаг 4:** Пришлите **картинку/фото** для объявления (файлом)."
+            )
+
+        # phase == "image": ждём картинку.
+        if not message.attachments:
+            return await message.channel.send("🖼️ Пришлите картинку/фото файлом.")
+        await self._finish(message, st, list(message.attachments))
 
     @app_commands.command(name="announce", description="Отправить объявление от имени бота в канал")
     @app_commands.describe(channel="Канал (по умолчанию текущий)", text="Текст объявления")
