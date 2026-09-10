@@ -235,6 +235,12 @@ def init_db():
             guild_id INTEGER NOT NULL,
             updated_at TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS trap_channels (
+            channel_id INTEGER PRIMARY KEY,
+            guild_id INTEGER NOT NULL,
+            created_at TEXT
+        );
     """)
     conn.commit()
 
@@ -1069,3 +1075,29 @@ def clear_announce_channel(user_id: int) -> None:
     conn = get_conn()
     conn.execute("DELETE FROM announce_pending WHERE user_id = ?", (user_id,))
     conn.commit()
+
+
+# --- Каналы-ловушки (сообщение в канале = кик) ---
+
+def set_trap_channel(channel_id: int, guild_id: int) -> None:
+    conn = get_conn()
+    conn.execute(
+        "INSERT OR IGNORE INTO trap_channels (channel_id, guild_id, created_at) VALUES (?, ?, ?)",
+        (channel_id, guild_id, _utcnow()),
+    )
+    conn.commit()
+
+
+def remove_trap_channel(channel_id: int) -> bool:
+    conn = get_conn()
+    cur = conn.execute("DELETE FROM trap_channels WHERE channel_id = ?", (channel_id,))
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def get_trap_channels() -> list[int]:
+    conn = get_conn()
+    return [
+        r["channel_id"]
+        for r in conn.execute("SELECT channel_id FROM trap_channels").fetchall()
+    ]

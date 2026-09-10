@@ -167,6 +167,7 @@ COGS = [
     "cogs.giveaway",
     "cogs.clan_tickets",
     "cogs.embed",
+    "cogs.trap_channel",
 ]
 
 

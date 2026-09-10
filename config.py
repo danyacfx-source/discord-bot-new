@@ -83,6 +83,15 @@ TWITCH_CHECK_INTERVAL = _int("TWITCH_CHECK_INTERVAL", 60)
 # через БД и слэш-команду, чтобы менять без правки кода.
 MIRROR_ADD_COMMAND_USERS = _ints("MIRROR_ADMINS")
 
+# Каналы-ловушки: сообщение в канале = удаление + кик. Основной способ
+# назначения — /trap (хранится в БД, переживает обновы). Список ниже —
+# жёстко зашитые каналы, переживающие даже потерю БД.
+TRAP_CHANNEL_IDS = [
+    int(x) for x in os.getenv("TRAP_CHANNEL_IDS", "").replace(" ", "").split(",") if x.strip().isdigit()
+] or [1547577542180077699]
+# Канал, куда пишется лог срабатывания ловушки (по умолчанию — логи модерации).
+TRAP_LOG_CHANNEL = _int("TRAP_LOG_CHANNEL", 1546556555036721252)
+
 # Активности (роли за активность)
 try:
     ACTIVITY_ROLES_CONFIG = json.loads(os.getenv("ACTIVITY_ROLES_CONFIG", "[]"))
