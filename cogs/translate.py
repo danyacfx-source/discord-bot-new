@@ -1,8 +1,3 @@
-import sys
-import os
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import asyncio
 import time
 import discord
@@ -17,12 +12,12 @@ from translator import async_translate_text
 # определять context_menu внутри класса кога.
 @app_commands.context_menu(name="Перевести")
 async def translate_context(interaction: discord.Interaction, message: discord.Message):
-    text = message.content.strip()
+    text = _message_text(message)
     if not text:
         await interaction.response.send_message("❌ Сообщение без текста.", ephemeral=True)
         return
 
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer()
     translated = await async_translate_text(text, config.TRANSLATE_TARGET)
     if not translated:
         await interaction.followup.send("❌ Не удалось перевести.", ephemeral=True)
@@ -33,7 +28,33 @@ async def translate_context(interaction: discord.Interaction, message: discord.M
         description=translated,
         color=config.EMBED_COLOR,
     )
-    await interaction.followup.send(embed=embed, ephemeral=True)
+    files = _image_files(message)
+    if files:
+        await interaction.followup.send(embed=embed, files=files)
+    else:
+        await interaction.followup.send(embed=embed)
+
+
+def _message_text(message: discord.Message) -> str:
+    """Текст: из content; если контента нет — из первого embed (Steam-фиды и т.п.)."""
+    text = message.content.strip()
+    if len(text) >= 2:
+        return text
+    for emb in message.embeds:
+        part = "\n".join(x for x in [emb.title or "", emb.description or ""] if x)
+        for f in emb.fields:
+            part += f"\n**{f.name}**: {f.value}"
+        if part.strip():
+            return part.strip()
+    return ""
+
+
+def _image_files(message: discord.Message) -> list[discord.Attachment]:
+    """Картинки из сообщения (прикреплённые), которые поедят вместе с переводом."""
+    return [
+        a for a in message.attachments
+        if a.content_type and a.content_type.startswith("image/")
+    ]
 
 
 class TranslateCog(commands.Cog):
@@ -48,14 +69,19 @@ class TranslateCog(commands.Cog):
         if message.author.bot:
             return
 
-        text = message.content.strip()
+        # Пересланные сообщения (forward) тоже переводим: особых кейсов нет,
+        # контент пересланного сообщения лежит в message.content.
+        is_forward = bool(message.flags and message.flags.forwarded)
 
         # Автоперевод только в перечисленных каналах.
         if message.channel.id not in config.TRANSLATE_CHANNELS:
             return
+
+        text = _message_text(message)
         if not text or len(text) < 2:
             return
-        if text.startswith(("http://", "https://", "!", "/", ".")):
+        # Скипаем команды и сырые ссылки; пересланные посты не трогаем фильтром.
+        if not is_forward and text.startswith(("http://", "https://", "!", "/", ".")):
             return
 
         now = time.monotonic()
@@ -72,7 +98,8 @@ class TranslateCog(commands.Cog):
                 description=translated,
                 color=config.EMBED_COLOR,
             )
-            await message.reply(embed=embed, mention_author=False)
+            files = _image_files(message)
+            await message.reply(embed=embed, files=files or None, mention_author=False)
 
 
 async def setup(bot: commands.Bot):
