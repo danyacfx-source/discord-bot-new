@@ -31,8 +31,34 @@ class TrapChannelCog(commands.Cog):
     def _is_trap(self, channel_id: int) -> bool:
         return channel_id in config.TRAP_CHANNEL_IDS or channel_id in get_trap_channels()
 
+    def _trap_ids(self) -> list[int]:
+        return list(dict.fromkeys([*config.TRAP_CHANNEL_IDS, *get_trap_channels()]))
+
     def _hardcoded(self, channel_id: int) -> bool:
         return channel_id in config.TRAP_CHANNEL_IDS
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        # Раскладываем предупреждение по каналам-ловушкам при каждом старте:
+        # если последнее сообщение в канале — не наше объявление, постим его.
+        for cid in self._trap_ids():
+            ch = self.bot.get_channel(cid)
+            if ch is None:
+                try:
+                    ch = await self.bot.fetch_channel(cid)
+                except Exception:
+                    continue
+            try:
+                async for msg in ch.history(limit=1):
+                    if msg.author.id == self.bot.user.id and msg.content == TRAP_NOTICE:
+                        break
+                else:
+                    await ch.send(TRAP_NOTICE)
+                    log.info("Предупреждение отправлено в канал-ловушку %s", cid)
+            except discord.Forbidden:
+                log.warning("Нет прав писать в канал-ловушку %s", cid)
+            except Exception as e:
+                log.warning("Не смог отправить предупреждение в ловушку %s: %s", cid, e)
 
     @app_commands.command(name="trap", description="Сделать канал ловушкой: сообщение в нём = кик")
     @app_commands.describe(channel="Канал (по умолчанию текущий)")
