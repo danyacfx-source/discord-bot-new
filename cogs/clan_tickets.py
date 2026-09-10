@@ -15,12 +15,20 @@ from database import get_conn
 
 log = logging.getLogger("clan_tickets")
 
-CLAN_EMBED_DESCRIPTION = (
-    "Здравствуйте! Пришлите информацию указанную ниже!\n\n"
-    "1. Лого клана\n"
-    "2. HEX код цвета клановой роли\n"
-    "3. Название клана"
+CLAN_APPLICATION_FORM = (
+    "# ЗАЯВКА НА РЕГИСТРАЦИЮ КЛАНА\n\n"
+    "1. Название клана.\n"
+    "2. Тег|Роль клана.\n"
+    "3. Ник лидера.\n"
+    "4. Количество участников.\n"
+    "5. Ссылка на Discord клана.\n"
+    "6. Кратко о клане.\n"
+    "7. Цели и задачи клана.\n\n"
+    "> Ознакомлен с Положением о регистрации и деятельности кланов WARDOGS | RU "
+    "и согласен соблюдать установленные правила."
 )
+
+CLAN_EMBED_DESCRIPTION = CLAN_APPLICATION_FORM
 
 
 class ClanTicketPanelView(discord.ui.View):
@@ -83,7 +91,7 @@ class ClanTicketPanelView(discord.ui.View):
             )
 
         embed = discord.Embed(
-            title="📝 Регистрация клана",
+            title="📝 ЗАЯВКА НА РЕГИСТРАЦИЮ КЛАНА",
             description=CLAN_EMBED_DESCRIPTION,
             color=discord.Color.gold(),
             timestamp=datetime.utcnow(),
@@ -230,11 +238,8 @@ class ClanTicketCog(commands.Cog):
         target = channel or interaction.channel
 
         embed = discord.Embed(
-            title="⚔️ Регистрация клана",
-            description=(
-                "Нажмите кнопку ниже, чтобы подать заявку на регистрацию клана!\n"
-                "В заявке нужно будет прислать: **логотип**, **HEX-код цвета клановой роли** и **название клана**."
-            ),
+            title="⚔️ ЗАЯВКА НА РЕГИСТРАЦИЮ КЛАНА",
+            description=CLAN_APPLICATION_FORM,
             color=discord.Color.gold(),
         )
         await target.send(embed=embed, view=ClanTicketPanelView())
