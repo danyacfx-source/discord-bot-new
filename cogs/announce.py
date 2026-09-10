@@ -200,12 +200,18 @@ class AnnounceCog(commands.Cog):
                 return await self._finish(message, st, list(message.attachments))
             st["phase"] = "image"
             return await message.channel.send(
-                "🖼️ **Шаг 4:** Пришлите **картинку/фото** для объявления (файлом)."
+                "🖼️ **Шаг 4:** Пришлите **картинку/фото** для объявления (файлом)\n"
+                "или отправьте `-`, чтобы отправить без картинки."
             )
 
-        # phase == "image": ждём картинку.
+        # phase == "image": ждём картинку; "-" = отправить без картинки.
+        if text == "-":
+            await self._finish(message, st, [])
+            return
         if not message.attachments:
-            return await message.channel.send("🖼️ Пришлите картинку/фото файлом.")
+            return await message.channel.send(
+                "🖼️ Пришлите картинку/фото файлом или отправьте `-`, чтобы отправить без картинки."
+            )
         await self._finish(message, st, list(message.attachments))
 
     @app_commands.command(name="announce", description="Отправить объявление от имени бота в канал")
