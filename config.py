@@ -63,9 +63,12 @@ VC_CONTROL_CHANNEL = _int("VC_CONTROL_CHANNEL")
 LOG_CHANNEL = _int("LOG_CHANNEL")
 
 # ---- Перевод ----
-# Каналы для автоперевода. Значение захардкожено, чтобы переживать обновы
-# (кнопка на хостинге сносит .env). Можно переопределить через .env.
-TRANSLATE_CHANNELS = _ints("TRANSLATE_CHANNELS") or [1543603551564079204, 1547304972054691900]
+# Каналы для автоперевода. Захардкоженные каналы работают всегда (переживут
+# обновы и .env), из .env можно добавлять свои — они объединяются.
+_default_translate_channels = [1543603551564079204, 1547304972054691900]
+TRANSLATE_CHANNELS = list(dict.fromkeys(
+    _ints("TRANSLATE_CHANNELS") + _default_translate_channels
+)) or list(_default_translate_channels)
 TRANSLATE_TARGET = os.getenv("TRANSLATE_TARGET", "ru")
 
 # ИИ-переводчик Gemini (бесплатный API, aistudio.google.com). Ключ захардкожен,

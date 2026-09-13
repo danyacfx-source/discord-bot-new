@@ -22,15 +22,11 @@ async def translate_context(interaction: discord.Interaction, message: discord.M
         await interaction.followup.send("❌ Не удалось перевести.", ephemeral=True)
         return
 
-    embed = _translation_embed(message, translated)
-    image_url = _embed_image_url(message)
     files = _attachment_files(message)
     if files:
-        await interaction.followup.send(embed=embed, files=files)
+        await interaction.followup.send(f"**Перевод:**\n{translated}", files=files)
     else:
-        if image_url:
-            embed.set_image(url=image_url)
-        await interaction.followup.send(embed=embed)
+        await interaction.followup.send(f"**Перевод:**\n{translated}")
 
 
 def _message_text(message: discord.Message) -> str:
@@ -55,27 +51,9 @@ def _message_text(message: discord.Message) -> str:
     return "\n\n".join(parts).strip()
 
 
-def _translation_embed(message: discord.Message, translated: str) -> discord.Embed:
-    embed = discord.Embed(
-        description=translated,
-        color=config.EMBED_COLOR,
-    )
-    return embed
-
-
 def _attachment_files(message: discord.Message) -> list[discord.Attachment]:
     """Вложения сообщения, чтобы пересылать вместе с переводом без потерь."""
     return list(message.attachments)[:10]
-
-
-def _embed_image_url(message: discord.Message) -> str | None:
-    """Картинка из embed'а (Steam-фиды и т.п.), если вложений нет."""
-    for emb in message.embeds:
-        if emb.image and emb.image.url:
-            return emb.image.url
-        if emb.thumbnail and emb.thumbnail.url:
-            return emb.thumbnail.url
-    return None
 
 
 class TranslateCog(commands.Cog):
@@ -101,9 +79,9 @@ class TranslateCog(commands.Cog):
         if message.channel.id not in config.TRANSLATE_CHANNELS:
             return
 
-        # Своё же сообщение-перевод (или собственное сообщение бота) не переводим повторно,
-        # чтобы не зациклиться. Новости из других ботов/вебхуков переводим всегда.
-        if message.author.id == self.bot.user.id or message.id in self._sent_ids:
+        # Своё же сообщение-перевод не переводим повторно, чтобы не зациклиться.
+        # Всё остальное (включая сообщения бота/вебхука в канале) — переводим.
+        if message.id in self._sent_ids:
             return
 
         text = _message_text(message)
@@ -117,15 +95,11 @@ class TranslateCog(commands.Cog):
         if translated.strip().lower() == text.strip().lower():
             return
 
-        embed = _translation_embed(message, translated)
-        image_url = _embed_image_url(message)
         files = _attachment_files(message)
         if files:
-            sent = await message.channel.send(embed=embed, files=files)
+            sent = await message.channel.send(translated, files=files)
         else:
-            if image_url:
-                embed.set_image(url=image_url)
-            sent = await message.channel.send(embed=embed)
+            sent = await message.channel.send(translated)
         if sent:
             self._remember(sent.id)
 
