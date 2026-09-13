@@ -142,7 +142,7 @@ class VoiceControlPanelView(discord.ui.View):
 
     @discord.ui.button(label="🔒 Закрыть/Открыть", style=discord.ButtonStyle.danger, custom_id="vc2_panel_lock")
     async def panel_lock(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Сначала мгновенно подтверждаем взаимодействие: set_overwrite может
+        # Сначала мгновенно подтверждаем взаимодействие: set_permissions может
         # не уложиться в 3 секунды окна ответа Discord.
         await interaction.response.defer(ephemeral=True)
         vc, err = await self._vc(interaction)
@@ -155,11 +155,11 @@ class VoiceControlPanelView(discord.ui.View):
 
         if is_locked:
             current.connect = None
-            await vc.set_overwrite(everyone, overwrite=current, reason="Канал открыт")
+            await vc.set_permissions(everyone, overwrite=current, reason="Канал открыт")
             text = "✅ Канал открыт."
         else:
             current.connect = False
-            await vc.set_overwrite(everyone, overwrite=current, reason="Канал закрыт")
+            await vc.set_permissions(everyone, overwrite=current, reason="Канал закрыт")
             text = "🔒 Канал закрыт."
         await interaction.followup.send(f"{text} (`{vc.name}`)", ephemeral=True)
 
@@ -174,11 +174,11 @@ class VoiceControlPanelView(discord.ui.View):
         is_hidden = current.view_channel is False
         if is_hidden:
             current.view_channel = None
-            await vc.set_overwrite(everyone, overwrite=current, reason="Канал видимый")
+            await vc.set_permissions(everyone, overwrite=current, reason="Канал видимый")
             text = "✅ Канал стал видимым."
         else:
             current.view_channel = False
-            await vc.set_overwrite(everyone, overwrite=current, reason="Канал скрыт")
+            await vc.set_permissions(everyone, overwrite=current, reason="Канал скрыт")
             text = "🙈 Канал скрыт (приватно)."
         await interaction.followup.send(text, ephemeral=True)
 
