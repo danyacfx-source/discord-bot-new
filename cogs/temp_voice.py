@@ -142,9 +142,12 @@ class VoiceControlPanelView(discord.ui.View):
 
     @discord.ui.button(label="🔒 Закрыть/Открыть", style=discord.ButtonStyle.danger, custom_id="vc2_panel_lock")
     async def panel_lock(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Сначала мгновенно подтверждаем взаимодействие: set_overwrite может
+        # не уложиться в 3 секунды окна ответа Discord.
+        await interaction.response.defer(ephemeral=True)
         vc, err = await self._vc(interaction)
         if err:
-            return await interaction.response.send_message(err, ephemeral=True)
+            return await interaction.followup.send(err, ephemeral=True)
 
         everyone = interaction.guild.default_role
         current = vc.overwrites_for(everyone)
@@ -158,13 +161,14 @@ class VoiceControlPanelView(discord.ui.View):
             current.connect = False
             await vc.set_overwrite(everyone, overwrite=current, reason="Канал закрыт")
             text = "🔒 Канал закрыт."
-        await interaction.response.send_message(f"{text} (`{vc.name}`)", ephemeral=True)
+        await interaction.followup.send(f"{text} (`{vc.name}`)", ephemeral=True)
 
     @discord.ui.button(label="✦ Видимость", style=discord.ButtonStyle.secondary, custom_id="vc2_panel_visibility")
     async def panel_visibility(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
         vc, err = await self._vc(interaction)
         if err:
-            return await interaction.response.send_message(err, ephemeral=True)
+            return await interaction.followup.send(err, ephemeral=True)
         everyone = interaction.guild.default_role
         current = vc.overwrites_for(everyone)
         is_hidden = current.view_channel is False
@@ -176,7 +180,7 @@ class VoiceControlPanelView(discord.ui.View):
             current.view_channel = False
             await vc.set_overwrite(everyone, overwrite=current, reason="Канал скрыт")
             text = "🙈 Канал скрыт (приватно)."
-        await interaction.response.send_message(text, ephemeral=True)
+        await interaction.followup.send(text, ephemeral=True)
 
     @discord.ui.button(label="👢 Выгнать", style=discord.ButtonStyle.secondary, custom_id="vc2_panel_kick")
     async def panel_kick(self, interaction: discord.Interaction, button: discord.ui.Button):
