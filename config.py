@@ -74,13 +74,13 @@ TRANSLATE_TARGET = os.getenv("TRANSLATE_TARGET", "ru")
 # ИИ-переводчик Gemini (бесплатный API, aistudio.google.com). Ключ захардкожен,
 # чтобы переживать обновы (кнопка на хостинге сносит .env).
 # Можно переопределить через GEMINI_API_KEY в .env.
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AQ.Ab8RN6J70QNd2h1kOXL1Pj03PtnLpJqadRDNYTQNffFEcQRW0g")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or "AQ.Ab8RN6J70QNd2h1kOXL1Pj03PtnLpJqadRDNYTQNffFEcQRW0g"
 # Точный id модели проверять в консоли Google AI Studio.
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
 # Резервные AI-движки (используются, когда Gemini недоступен).
 # Groq: бесплатный API, console.groq.com; не работает из РФ, работает из EU.
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "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")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") or "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"
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 # Фон rank-карточки (путь к картинке; пусто = градиент)
