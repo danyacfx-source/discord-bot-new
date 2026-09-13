@@ -56,12 +56,9 @@ def _message_text(message: discord.Message) -> str:
 
 def _translation_embed(message: discord.Message, translated: str) -> discord.Embed:
     embed = discord.Embed(
-        title=f"🌐 Перевод • {message.author.display_name}",
         description=translated,
         color=config.EMBED_COLOR,
-        url=message.jump_url,
     )
-    embed.set_footer(text=f"Канал: #{message.channel.name}")
     return embed
 
 
