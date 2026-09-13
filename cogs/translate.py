@@ -1,3 +1,4 @@
+import time
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -80,15 +81,29 @@ def _embed_image_url(message: discord.Message) -> str | None:
 class TranslateCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        # ID собственных сообщений-переводов: по ним не переводим повторно.
+        self._sent_ids: set[int] = set()
+        self._sent_ts: dict[int, float] = {}
+
+    def _remember(self, msg_id: int):
+        self._sent_ids.add(msg_id)
+        self._sent_ts[msg_id] = time.monotonic()
+        # Чистим старые записи, чтобы множество не разрасталось.
+        now = time.monotonic()
+        stale = [mid for mid, ts in self._sent_ts.items() if now - ts > 3600]
+        for mid in stale:
+            self._sent_ids.discard(mid)
+            self._sent_ts.pop(mid, None)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Не трогаем собственные ответы-переводы, чтобы не было цикла.
-        if message.author.id == self.bot.user.id:
-            return
-
         # Автоперевод только в перечисленных каналах.
         if message.channel.id not in config.TRANSLATE_CHANNELS:
+            return
+
+        # Своё же сообщение-перевод (или собственное сообщение бота) не переводим повторно,
+        # чтобы не зациклиться. Новости из других ботов/вебхуков переводим всегда.
+        if message.author.id == self.bot.user.id or message.id in self._sent_ids:
             return
 
         text = _message_text(message)
@@ -106,11 +121,13 @@ class TranslateCog(commands.Cog):
         image_url = _embed_image_url(message)
         files = _attachment_files(message)
         if files:
-            await message.channel.send(embed=embed, files=files)
+            sent = await message.channel.send(embed=embed, files=files)
         else:
             if image_url:
                 embed.set_image(url=image_url)
-            await message.channel.send(embed=embed)
+            sent = await message.channel.send(embed=embed)
+        if sent:
+            self._remember(sent.id)
 
 
 async def setup(bot: commands.Bot):
