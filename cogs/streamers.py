@@ -37,7 +37,7 @@ def _can_manage_streamers(interaction: discord.Interaction) -> bool:
 class StreamersCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self._live_messages: dict[str, discord.Message] = {}
+        self._live_messages: dict[str, tuple[int, int]] = {}
         self.twitch_loop.start()
 
     def cog_unload(self):
@@ -116,7 +116,15 @@ class StreamersCog(commands.Cog):
                 except discord.NotFound:
                     self._live_messages.pop(login, None)
             elif not stream.is_live and was_live:
-                await channel.send(embed=self._offline_embed(stream))
+                if msg is not None:
+                    # Меняем живой эмбед на «завершён» вместо отправки нового сообщения.
+                    try:
+                        await msg.edit(embed=self._offline_embed(stream))
+                    except discord.NotFound:
+                        self._live_messages.pop(login, None)
+                        await channel.send(embed=self._offline_embed(stream))
+                else:
+                    await channel.send(embed=self._offline_embed(stream))
                 self._live_messages.pop(login, None)
                 set_streamer_live(login, False)
 
@@ -150,7 +158,11 @@ class StreamersCog(commands.Cog):
             color=LIVE_COLOR,
             timestamp=discord.utils.utcnow(),
         )
-        embed.set_author(name=stream.display_name, url=stream.url)
+        embed.set_author(
+            name=stream.display_name,
+            url=stream.url,
+            icon_url=stream.avatar or None,
+        )
         embed.add_field(name="🎮 Игра", value=stream.game, inline=True)
         embed.add_field(name="👥 Зрители", value=f"**{stream.viewers}**", inline=True)
         if stream.thumbnail:
@@ -160,11 +172,17 @@ class StreamersCog(commands.Cog):
 
     def _offline_embed(self, stream) -> discord.Embed:
         embed = discord.Embed(
-            title="Стрим закончился",
-            description=f"[{stream.display_name}]({stream.url}) завершил(а) трансляцию.",
+            title="Стрим завершён",
+            description=f"[{stream.display_name}]({stream.url}) закончил(а) трансляцию.",
             color=OFFLINE_COLOR,
             timestamp=discord.utils.utcnow(),
         )
+        embed.set_author(
+            name=stream.display_name,
+            url=stream.url,
+            icon_url=stream.avatar or None,
+        )
+        embed.set_footer(text=f"Twitch • {stream.login}")
         return embed
 
     # ---------- Команды (без правки кода) ----------

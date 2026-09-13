@@ -17,6 +17,7 @@ class TwitchStream:
         self.login = user.get("login", "")
         self.display_name = user.get("displayName") or self.login
         self.channel_title = (user.get("broadcastSettings") or {}).get("title", "")
+        self.avatar = user.get("profileImageURL") or ""
 
         self.is_live = bool(stream.get("id"))
         self.stream_title = (stream.get("title") or "").strip()
@@ -61,7 +62,7 @@ def _request(query: str) -> dict:
 
 
 _QUERY = (
-    "query { user(login: \"__LOGIN__\") { id login displayName "
+    "query { user(login: \"__LOGIN__\") { id login displayName profileImageURL "
     "broadcastSettings { title } "
     "stream { id type viewersCount game { displayName } "
     "previewImageURL(width: 640, height: 360) title createdAt } } }"

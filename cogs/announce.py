@@ -118,7 +118,8 @@ class ChannelSelectView(discord.ui.View):
         await interaction.response.send_message(
             f"**Шаг 3:** Напишите **текст** объявления в этот личный чат.\n"
             f"📍 Канал: **#{channel.name}**\n"
-            f"После текста бот попросит прислать картинку."
+            f"После текста бот попросит прислать картинку.\n"
+            f"Начните с `-`, чтобы пропустить текст и сразу перейти к картинке."
         )
 
 
@@ -154,6 +155,13 @@ class AnnounceCog(commands.Cog):
             self._state.pop(message.author.id, None)
             return await message.channel.send(
                 "❌ Канал не найден. Начните заново: напишите «старт» в личку бота."
+            )
+
+        if not st["text"] and not attachments:
+            clear_announce_channel(message.author.id)
+            self._state.pop(message.author.id, None)
+            return await message.channel.send(
+                "❌ Объявление пустое: и текст, и картинка пропущены. Отправка отменена."
             )
 
         files = [await a.to_file() for a in attachments]
@@ -193,8 +201,19 @@ class AnnounceCog(commands.Cog):
             self._state[message.author.id] = st
 
         if st["phase"] == "text":
+            if text == "-":
+                st["text"] = None
+                if message.attachments:
+                    return await self._finish(message, st, list(message.attachments))
+                st["phase"] = "image"
+                return await message.channel.send(
+                    "🖼️ **Шаг 4:** Пришлите **картинку/фото** для объявления (файлом)\n"
+                    "или отправьте `-`, чтобы отправить без картинки."
+                )
             if not text:
-                return await message.channel.send("🗒️ Сначала напишите **текст** объявления.")
+                return await message.channel.send(
+                    "🗒️ Сначала напишите **текст** объявления (`-` — пропустить текст)."
+                )
             st["text"] = text
             if message.attachments:
                 return await self._finish(message, st, list(message.attachments))

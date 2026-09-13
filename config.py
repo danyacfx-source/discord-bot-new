@@ -63,7 +63,9 @@ VC_CONTROL_CHANNEL = _int("VC_CONTROL_CHANNEL")
 LOG_CHANNEL = _int("LOG_CHANNEL")
 
 # Перевод
-TRANSLATE_CHANNELS = _ints("TRANSLATE_CHANNELS")
+# Каналы для автоперевода. Значение захардкожено, чтобы переживать обновы
+# (кнопка на хостинге сносит .env). Можно переопределить через .env.
+TRANSLATE_CHANNELS = _ints("TRANSLATE_CHANNELS") or [1543603551564079204, 1547304972054691900]
 TRANSLATE_TARGET = os.getenv("TRANSLATE_TARGET", "ru")
 
 # Фон rank-карточки (путь к картинке; пусто = градиент)

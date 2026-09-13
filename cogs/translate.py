@@ -1,5 +1,3 @@
-import asyncio
-import time
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -23,83 +21,99 @@ async def translate_context(interaction: discord.Interaction, message: discord.M
         await interaction.followup.send("❌ Не удалось перевести.", ephemeral=True)
         return
 
-    embed = discord.Embed(
-        title=f"🌐 Перевод • {message.author.display_name}",
-        description=translated,
-        color=config.EMBED_COLOR,
-    )
-    files = _image_files(message)
+    embed = _translation_embed(message, translated)
+    image_url = _embed_image_url(message)
+    files = _attachment_files(message)
     if files:
         await interaction.followup.send(embed=embed, files=files)
     else:
+        if image_url:
+            embed.set_image(url=image_url)
         await interaction.followup.send(embed=embed)
 
 
 def _message_text(message: discord.Message) -> str:
-    """Текст: из content; если контента нет — из первого embed (Steam-фиды и т.п.)."""
-    text = message.content.strip()
-    if len(text) >= 2:
-        return text
+    """Весь текст сообщения с сохранением структуры: content + все embed'ы."""
+    parts: list[str] = []
+
+    if message.content and message.content.strip():
+        parts.append(message.content.strip())
+
     for emb in message.embeds:
-        part = "\n".join(x for x in [emb.title or "", emb.description or ""] if x)
-        for f in emb.fields:
-            part += f"\n**{f.name}**: {f.value}"
-        if part.strip():
-            return part.strip()
-    return ""
+        emb_parts: list[str] = []
+        if emb.title:
+            emb_parts.append(f"**{emb.title}**")
+        if emb.description:
+            emb_parts.append(emb.description.strip())
+        for field in emb.fields:
+            if field.name or field.value:
+                emb_parts.append(f"**{field.name}**: {field.value}".strip())
+        if emb_parts:
+            parts.append("\n\n".join(emb_parts))
+
+    return "\n\n".join(parts).strip()
 
 
-def _image_files(message: discord.Message) -> list[discord.Attachment]:
-    """Картинки из сообщения (прикреплённые), которые поедят вместе с переводом."""
-    return [
-        a for a in message.attachments
-        if a.content_type and a.content_type.startswith("image/")
-    ]
+def _translation_embed(message: discord.Message, translated: str) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"🌐 Перевод • {message.author.display_name}",
+        description=translated,
+        color=config.EMBED_COLOR,
+        url=message.jump_url,
+    )
+    embed.set_footer(text=f"Канал: #{message.channel.name}")
+    return embed
+
+
+def _attachment_files(message: discord.Message) -> list[discord.Attachment]:
+    """Вложения сообщения, чтобы пересылать вместе с переводом без потерь."""
+    return list(message.attachments)[:10]
+
+
+def _embed_image_url(message: discord.Message) -> str | None:
+    """Картинка из embed'а (Steam-фиды и т.п.), если вложений нет."""
+    for emb in message.embeds:
+        if emb.image and emb.image.url:
+            return emb.image.url
+        if emb.thumbnail and emb.thumbnail.url:
+            return emb.thumbnail.url
+    return None
 
 
 class TranslateCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        # Тонкий кулдаун автоперевода на канал: не реплаить при спаме подряд.
-        self._last_auto: dict[int, float] = {}
-        self._lock = asyncio.Lock()
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        if message.author.bot:
+        # Не трогаем собственные ответы-переводы, чтобы не было цикла.
+        if message.author.id == self.bot.user.id:
             return
-
-        # Пересланные сообщения (forward) тоже переводим: особых кейсов нет,
-        # контент пересланного сообщения лежит в message.content.
-        is_forward = bool(message.flags and message.flags.forwarded)
 
         # Автоперевод только в перечисленных каналах.
         if message.channel.id not in config.TRANSLATE_CHANNELS:
             return
 
         text = _message_text(message)
-        if not text or len(text) < 2:
+        if not text:
             return
-        # Скипаем команды и сырые ссылки; пересланные посты не трогаем фильтром.
-        if not is_forward and text.startswith(("http://", "https://", "!", "/", ".")):
-            return
-
-        now = time.monotonic()
-        async with self._lock:
-            last = self._last_auto.get(message.channel.id, 0)
-            if now - last < 5:
-                return
-            self._last_auto[message.channel.id] = now
 
         translated = await async_translate_text(text, config.TRANSLATE_TARGET)
-        if translated and translated.strip().lower() != text.lower():
-            embed = discord.Embed(
-                title=f"🌐 Перевод • {message.author.display_name}",
-                description=translated,
-                color=config.EMBED_COLOR,
-            )
-            files = _image_files(message)
-            await message.reply(embed=embed, files=files or None, mention_author=False)
+        if not translated:
+            return
+        # Сообщение уже на языке назначения — дублировать не нужно.
+        if translated.strip().lower() == text.strip().lower():
+            return
+
+        embed = _translation_embed(message, translated)
+        image_url = _embed_image_url(message)
+        files = _attachment_files(message)
+        if files:
+            await message.channel.send(embed=embed, files=files)
+        else:
+            if image_url:
+                embed.set_image(url=image_url)
+            await message.channel.send(embed=embed)
 
 
 async def setup(bot: commands.Bot):
